@@ -17,11 +17,10 @@ class BotClient {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
-            console.log('Connected to bot server');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.requestStatus();
-            this.ui.logToConsole('Connected to bot server');
+            this.ui.logToConsole('{green-fg}Connected to bot server{/green-fg}');
         });
 
         this.ws.on('message', (data) => {

@@ -4,9 +4,10 @@ const contrib = require('blessed-contrib');
 class BotUI {
     constructor(client) {
         this.client = client;
-        this.setupScreen();
         this.chatMessages = [];
         this.maxChatMessages = 100;
+        this.messagesSeen = new Set(); // Add message deduplication
+        this.setupScreen();
     }
 
     setupScreen() {
@@ -109,7 +110,10 @@ class BotUI {
             padding: {
                 left: 1,
                 right: 1
-            }
+            },
+            mouse: true,
+            scrollbar: true,
+            scrollable: true
         });
 
         // Create command input box
@@ -163,8 +167,17 @@ class BotUI {
             }
         });
 
+        // Add to setupScreen()
+        this.screen.key(['C-l'], () => {
+            this.clearConsole();
+        });
+
         // Focus on input by default
         this.inputBox.focus();
+
+        // Ensure proper layout
+        this.screen.append(this.consoleBox);
+        this.screen.append(this.inputBox);
 
         // Initial render
         this.screen.render();
@@ -228,25 +241,39 @@ class BotUI {
     }
 
     logToConsole(message) {
+        // Deduplicate messages
+        const messageHash = `${message}`; // You can make this more sophisticated if needed
+        if (this.messagesSeen.has(messageHash)) {
+            return;
+        }
+        this.messagesSeen.add(messageHash);
+
         const timestamp = new Date().toLocaleTimeString();
-        
-        // Clean up debug messages
-        let cleanMessage = message;
-        if (message.startsWith('[DEBUG]')) {
-            cleanMessage = message.replace('[DEBUG]', '').trim();
-            cleanMessage = `{gray-fg}DEBUG:{/gray-fg} ${cleanMessage}`;
+        let formattedMessage = '';
+
+        // Clean up and format messages
+        if (message.includes('Connected to bot server')) {
+            formattedMessage = `{green-fg}${message}{/green-fg}`;
+        } else if (message.startsWith('[DEBUG]')) {
+            const cleanMessage = message.replace('[DEBUG]', '').trim();
+            formattedMessage = `{gray-fg}DEBUG:{/gray-fg} ${cleanMessage}`;
         } else if (message.includes('info:')) {
-            cleanMessage = message.replace(/\[.*?\]/g, '').trim();
-            cleanMessage = `{cyan-fg}INFO:{/cyan-fg} ${cleanMessage}`;
+            const cleanMessage = message.replace(/\[.*?\]/g, '').trim();
+            formattedMessage = `{cyan-fg}INFO:{/cyan-fg} ${cleanMessage}`;
+        } else if (message.includes('Error:')) {
+            formattedMessage = `{red-fg}${message}{/red-fg}`;
+        } else {
+            formattedMessage = message;
         }
 
-        // Format system messages
-        if (message.includes('Connected to') || message.includes('Disconnected from')) {
-            cleanMessage = `{green-fg}${message}{/green-fg}`;
+        // Add timestamp and log
+        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
+        
+        // Limit stored messages
+        if (this.messagesSeen.size > 100) {
+            this.messagesSeen.clear();
         }
 
-        // Add timestamp
-        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
         this.screen.render();
     }
 
@@ -298,6 +325,13 @@ class BotUI {
 
             this.screen.render();
         });
+    }
+
+    // Add method to clear console
+    clearConsole() {
+        this.consoleBox.setContent('');
+        this.messagesSeen.clear();
+        this.screen.render();
     }
 }
 
