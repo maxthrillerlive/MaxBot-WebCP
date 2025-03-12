@@ -66,35 +66,34 @@ class BotClient {
     }
 
     handleMessage(message) {
-        switch (message.type) {
-            case 'STATUS':
-                this.ui.updateStatus(message.data);
-                break;
-            case 'COMMANDS':
-                this.ui.updateCommands(message.data);
-                break;
-            case 'COMMAND_ENABLED':
-                this.ui.logToConsole(`Command enabled: ${message.command}`);
-                this.requestCommands();
-                break;
-            case 'COMMAND_DISABLED':
-                this.ui.logToConsole(`Command disabled: ${message.command}`);
-                this.requestCommands();
-                break;
-            case 'COMMAND_RESULT':
-                this.ui.logToConsole(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
-                break;
-            case 'CHAT_MESSAGE':
-                this.ui.addChatMessage(message.data);
-                break;
-            case 'CONNECTION_STATE':
-                this.ui.updateConnectionState(message.state);
-                break;
-            case 'ERROR':
-                this.ui.logToConsole(`Error: ${message.error}`);
-                break;
-            default:
-                this.ui.logToConsole(`Unknown message type: ${message.type}`);
+        try {
+            switch (message.type) {
+                case 'STATUS':
+                    this.ui.updateStatus(message.data);
+                    break;
+                case 'COMMANDS':
+                    this.ui.updateCommands(message.data);
+                    break;
+                case 'COMMAND_ENABLED':
+                case 'COMMAND_DISABLED':
+                case 'COMMAND_RESULT':
+                    // Skip these messages as they're handled by the command list
+                    break;
+                case 'CHAT_MESSAGE':
+                    // Format chat messages
+                    const chatMsg = `info: [${message.data.channel}] <${message.data.username}>: ${message.data.message}`;
+                    this.ui.logToConsole(chatMsg);
+                    break;
+                case 'CONNECTION_STATE':
+                    this.ui.logToConsole(`Bot ${message.state}`);
+                    break;
+                case 'ERROR':
+                    this.ui.logToConsole(`Error: ${message.error}`);
+                    break;
+            }
+        } catch (err) {
+            console.error('Error handling message:', err);
+            this.ui.logToConsole(`Error: ${err.message}`);
         }
     }
 

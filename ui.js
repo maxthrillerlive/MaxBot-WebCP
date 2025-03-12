@@ -203,7 +203,7 @@ class BotUI {
     }
 
     updateStatus(status) {
-        let content = '{center}Bot Status{/center}\n\n';
+        let content = '';
         content += `State: ${status.connectionState}\n`;
         content += `Username: ${status.username}\n`;
         content += `Channels: ${status.channels.join(', ')}\n`;
@@ -229,7 +229,7 @@ class BotUI {
     updateCommands(commands) {
         this.commandList.setItems(
             commands.map(cmd => {
-                const status = cmd.enabled ? '{green-fg}✓{/green-fg}' : '{red-fg}✗{/red-fg}';
+                const status = cmd.enabled ? '✓' : '✗';
                 return `${status} ${cmd.trigger}`;
             })
         );
@@ -242,28 +242,38 @@ class BotUI {
 
         const timestamp = new Date().toLocaleTimeString();
 
-        // Handle chat messages
-        if (message.includes('info:')) {
+        // Handle different message types
+        if (message.startsWith('[DEBUG]')) {
+            // Skip all debug messages
+            return;
+        } 
+        else if (message.includes('info:')) {
+            // Handle chat messages
             if (message.includes('<')) {
+                // Extract username and message
                 const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
                 if (matches) {
                     const [, username, text] = matches;
+                    // Add chat message to chat window
                     this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
+                    return;
                 }
-            } else if (message.includes('Available commands:')) {
-                const cleanMessage = message.replace(/\[.*?\] info: \[.*?\] <.*?>: /, '');
-                this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
+            }
+            // Handle command responses
+            if (message.includes('Available commands:')) {
+                const commands = message.split('Available commands:')[1].trim();
+                this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} Available commands: ${commands}`);
+                return;
             }
         }
-        // Handle system messages
+        else if (message === 'Control panel connected') {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
+        }
         else if (message.includes('Connected to bot server')) {
             this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
         }
         else if (message.includes('Error:')) {
             this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {red-fg}${message}{/red-fg}`);
-        }
-        else if (!message.startsWith('[DEBUG]')) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
         }
 
         this.screen.render();
