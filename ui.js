@@ -31,8 +31,13 @@ class BotUI {
             scrollable: true,
             alwaysScroll: true,
             scrollbar: {
-                ch: ' ',
-                bg: 'cyan'
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
             },
             border: {
                 type: 'line',
@@ -43,7 +48,13 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
-            }
+            },
+            wrap: true,
+            padding: {
+                left: 1,
+                right: 1
+            },
+            mouse: true
         });
 
         // Create the status panel (right side, top)
@@ -196,19 +207,16 @@ class BotUI {
         
         // Add badges if available
         if (data.badges) {
-            if (data.badges.broadcaster) message += '{red-fg}👑{/red-fg}';
-            if (data.badges.moderator) message += '{green-fg}⚔️{/green-fg}';
-            if (data.badges.vip) message += '{purple-fg}💎{/purple-fg}';
-            if (data.badges.subscriber) message += '{blue-fg}★{/blue-fg}';
+            if (data.badges.broadcaster) message += '{red-fg}👑{/red-fg} ';
+            if (data.badges.moderator) message += '{green-fg}⚔️{/green-fg} ';
+            if (data.badges.vip) message += '{purple-fg}💎{/purple-fg} ';
+            if (data.badges.subscriber) message += '{blue-fg}★{/blue-fg} ';
         }
         
-        message += ` {yellow-fg}${data.username}{/yellow-fg}: ${data.message}`;
+        // Add username and message
+        message += `{yellow-fg}${data.username}{/yellow-fg}: ${data.message}`;
         
-        this.chatMessages.push(message);
-        if (this.chatMessages.length > this.maxChatMessages) {
-            this.chatMessages.shift();
-        }
-        
+        // Add to chat box
         this.chatBox.log(message);
         this.screen.render();
     }
@@ -256,25 +264,34 @@ class BotUI {
 
         // Format based on message type
         if (message.startsWith('[DEBUG]')) {
-            // Skip certain debug messages we don't want to show
+            // Skip most debug messages except important ones
             if (message.includes('Command handled:') || 
-                message.includes('Attempting to handle command') ||
-                message.includes('Processing command:')) {
+                message.includes('Attempting to handle') ||
+                message.includes('Processing command:') ||
+                message.includes('Target channel:') ||
+                message.includes('User context:') ||
+                message.includes('Received message:')) {
                 return;
             }
             // Format remaining debug messages
             const cleanMessage = message.replace('[DEBUG]', '').trim();
-            if (cleanMessage.includes('Available commands to show:')) {
-                return; // Skip raw command list as it's shown in the UI
-            }
             formattedMessage = `{gray-fg}${cleanMessage}{/gray-fg}`;
         }
-        else if (message.startsWith('info:')) {
-            // Clean up info messages
-            const cleanMessage = message.replace(/\[.*?\]/g, '').trim()
-                                     .replace(/^info:\s*/, '')
-                                     .replace(/<.*?>:\s*/, '');
-            formattedMessage = `{cyan-fg}${cleanMessage}{/cyan-fg}`;
+        else if (message.includes('info:')) {
+            // Clean up chat messages
+            if (message.includes('<')) {
+                const matches = message.match(/\[(.*?)\] info: \[(.*?)\] <(.*?)>: (.*)/);
+                if (matches) {
+                    const [, , channel, user, text] = matches;
+                    formattedMessage = `{yellow-fg}${user}{/yellow-fg}: ${text}`;
+                } else {
+                    formattedMessage = message.replace(/\[.*?\]/g, '').trim();
+                }
+            } else {
+                formattedMessage = message.replace(/\[.*?\]/g, '').trim()
+                                       .replace(/^info:\s*/, '')
+                                       .replace(/<.*?>:\s*/, '');
+            }
         }
         else if (message.includes('Connected to bot server')) {
             formattedMessage = `{green-fg}${message}{/green-fg}`;
@@ -289,7 +306,7 @@ class BotUI {
             formattedMessage = message;
         }
 
-        // Add timestamp and log if we have a formatted message
+        // Only log if we have a formatted message
         if (formattedMessage) {
             this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
             this.screen.render();
