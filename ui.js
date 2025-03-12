@@ -260,57 +260,38 @@ class BotUI {
         if (!message || message.trim() === '') return;
 
         const timestamp = new Date().toLocaleTimeString();
-        let formattedMessage = '';
 
-        // Format based on message type
-        if (message.startsWith('[DEBUG]')) {
-            // Skip most debug messages except important ones
-            if (message.includes('Command handled:') || 
-                message.includes('Attempting to handle') ||
-                message.includes('Processing command:') ||
-                message.includes('Target channel:') ||
-                message.includes('User context:') ||
-                message.includes('Received message:')) {
-                return;
-            }
-            // Format remaining debug messages
-            const cleanMessage = message.replace('[DEBUG]', '').trim();
-            formattedMessage = `{gray-fg}${cleanMessage}{/gray-fg}`;
-        }
-        else if (message.includes('info:')) {
-            // Clean up chat messages
+        // Handle chat messages and commands
+        if (message.includes('info:')) {
+            // Extract just the chat message
             if (message.includes('<')) {
-                const matches = message.match(/\[(.*?)\] info: \[(.*?)\] <(.*?)>: (.*)/);
+                const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
                 if (matches) {
-                    const [, , channel, user, text] = matches;
-                    formattedMessage = `{yellow-fg}${user}{/yellow-fg}: ${text}`;
-                } else {
-                    formattedMessage = message.replace(/\[.*?\]/g, '').trim();
+                    const [, username, text] = matches;
+                    this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
                 }
-            } else {
-                formattedMessage = message.replace(/\[.*?\]/g, '').trim()
-                                       .replace(/^info:\s*/, '')
-                                       .replace(/<.*?>:\s*/, '');
+            } else if (message.includes('Available commands:')) {
+                // Clean up command list message
+                const cleanMessage = message.replace(/\[.*?\]/g, '').trim()
+                    .replace('info:', '')
+                    .replace('<max2d2>:', '');
+                this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
             }
         }
+        // Skip all DEBUG messages
+        else if (message.startsWith('[DEBUG]')) {
+            return;
+        }
+        // Handle connection messages
         else if (message.includes('Connected to bot server')) {
-            formattedMessage = `{green-fg}${message}{/green-fg}`;
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
         }
-        else if (message.includes('Error:') || message.includes('error:')) {
-            formattedMessage = `{red-fg}${message}{/red-fg}`;
-        }
-        else if (message.includes('Command executed:')) {
-            formattedMessage = `{yellow-fg}${message}{/yellow-fg}`;
-        }
-        else {
-            formattedMessage = message;
+        // Handle errors
+        else if (message.includes('Error:')) {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {red-fg}${message}{/red-fg}`);
         }
 
-        // Only log if we have a formatted message
-        if (formattedMessage) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
-            this.screen.render();
-        }
+        this.screen.render();
     }
 
     async confirmExit() {
@@ -371,4 +352,5 @@ class BotUI {
     }
 }
 
+module.exports = BotUI;
 module.exports = BotUI;
