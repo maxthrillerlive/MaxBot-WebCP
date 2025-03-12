@@ -93,8 +93,13 @@ class BotUI {
             scrollable: true,
             alwaysScroll: true,
             scrollbar: {
-                ch: ' ',
-                bg: 'cyan'
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
             },
             border: {
                 type: 'line',
@@ -111,9 +116,7 @@ class BotUI {
                 left: 1,
                 right: 1
             },
-            mouse: true,
-            scrollbar: true,
-            scrollable: true
+            mouse: true
         });
 
         // Create command input box
@@ -179,6 +182,10 @@ class BotUI {
         this.screen.append(this.consoleBox);
         this.screen.append(this.inputBox);
 
+        // Ensure console is above input box
+        this.consoleBox.setIndex(1);
+        this.inputBox.setIndex(0);
+
         // Initial render
         this.screen.render();
     }
@@ -241,40 +248,52 @@ class BotUI {
     }
 
     logToConsole(message) {
-        // Deduplicate messages
-        const messageHash = `${message}`; // You can make this more sophisticated if needed
-        if (this.messagesSeen.has(messageHash)) {
-            return;
-        }
-        this.messagesSeen.add(messageHash);
+        // Skip empty messages
+        if (!message || message.trim() === '') return;
 
         const timestamp = new Date().toLocaleTimeString();
         let formattedMessage = '';
 
-        // Clean up and format messages
-        if (message.includes('Connected to bot server')) {
-            formattedMessage = `{green-fg}${message}{/green-fg}`;
-        } else if (message.startsWith('[DEBUG]')) {
+        // Format based on message type
+        if (message.startsWith('[DEBUG]')) {
+            // Skip certain debug messages we don't want to show
+            if (message.includes('Command handled:') || 
+                message.includes('Attempting to handle command') ||
+                message.includes('Processing command:')) {
+                return;
+            }
+            // Format remaining debug messages
             const cleanMessage = message.replace('[DEBUG]', '').trim();
-            formattedMessage = `{gray-fg}DEBUG:{/gray-fg} ${cleanMessage}`;
-        } else if (message.includes('info:')) {
-            const cleanMessage = message.replace(/\[.*?\]/g, '').trim();
-            formattedMessage = `{cyan-fg}INFO:{/cyan-fg} ${cleanMessage}`;
-        } else if (message.includes('Error:')) {
+            if (cleanMessage.includes('Available commands to show:')) {
+                return; // Skip raw command list as it's shown in the UI
+            }
+            formattedMessage = `{gray-fg}${cleanMessage}{/gray-fg}`;
+        }
+        else if (message.startsWith('info:')) {
+            // Clean up info messages
+            const cleanMessage = message.replace(/\[.*?\]/g, '').trim()
+                                     .replace(/^info:\s*/, '')
+                                     .replace(/<.*?>:\s*/, '');
+            formattedMessage = `{cyan-fg}${cleanMessage}{/cyan-fg}`;
+        }
+        else if (message.includes('Connected to bot server')) {
+            formattedMessage = `{green-fg}${message}{/green-fg}`;
+        }
+        else if (message.includes('Error:') || message.includes('error:')) {
             formattedMessage = `{red-fg}${message}{/red-fg}`;
-        } else {
+        }
+        else if (message.includes('Command executed:')) {
+            formattedMessage = `{yellow-fg}${message}{/yellow-fg}`;
+        }
+        else {
             formattedMessage = message;
         }
 
-        // Add timestamp and log
-        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
-        
-        // Limit stored messages
-        if (this.messagesSeen.size > 100) {
-            this.messagesSeen.clear();
+        // Add timestamp and log if we have a formatted message
+        if (formattedMessage) {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
+            this.screen.render();
         }
-
-        this.screen.render();
     }
 
     async confirmExit() {

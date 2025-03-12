@@ -74,11 +74,11 @@ class BotClient {
                 this.ui.updateCommands(message.data);
                 break;
             case 'COMMAND_ENABLED':
-                this.ui.logToConsole(`Enabled command: ${message.command}`);
+                this.ui.logToConsole(`Command enabled: ${message.command}`);
                 this.requestCommands();
                 break;
             case 'COMMAND_DISABLED':
-                this.ui.logToConsole(`Disabled command: ${message.command}`);
+                this.ui.logToConsole(`Command disabled: ${message.command}`);
                 this.requestCommands();
                 break;
             case 'COMMAND_RESULT':
@@ -91,11 +91,10 @@ class BotClient {
                 this.ui.updateConnectionState(message.state);
                 break;
             case 'ERROR':
-                console.error('Server error:', message.error);
                 this.ui.logToConsole(`Error: ${message.error}`);
                 break;
             default:
-                console.warn('Unknown message type:', message.type);
+                this.ui.logToConsole(`Unknown message type: ${message.type}`);
         }
     }
 
