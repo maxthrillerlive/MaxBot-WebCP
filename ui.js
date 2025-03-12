@@ -214,38 +214,33 @@ class BotUI {
         if (!this.consoleBox) return;
 
         const timestamp = new Date().toLocaleTimeString();
-        let formattedMessage = '';
-
-        // Format based on message type
-        if (typeof message === 'string') {
-            if (message.includes('Connected to bot server')) {
-                formattedMessage = `{green-fg}${message}{/green-fg}`;
-            } else if (message.includes('Error:')) {
-                formattedMessage = `{red-fg}${message}{/red-fg}`;
-            } else if (message.includes('info:') && message.includes('<')) {
-                // Chat messages go to chat panel, not console
-                const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
-                if (matches) {
-                    const [, channel, username, text] = matches;
-                    this.processChatMessage(message);
-                }
-                return;
-            } else if (message.includes('Bot Status:')) {
-                // Skip status messages as they go to the status panel
-                return;
-            } else if (message.includes('Available Commands:')) {
-                formattedMessage = `{cyan-fg}${message}{/cyan-fg}`;
-            } else if (message.includes('Command sent:')) {
-                formattedMessage = `{yellow-fg}${message}{/yellow-fg}`;
-            } else {
-                formattedMessage = message;
-            }
+        
+        // Check if message already has color formatting
+        const hasFormatting = message.includes('{') && message.includes('}');
+        
+        // Add timestamp to all messages
+        let formattedMessage = `{gray-fg}[${timestamp}]{/gray-fg} `;
+        
+        // If message already has formatting, just append it
+        if (hasFormatting) {
+            formattedMessage += message;
         } else {
-            formattedMessage = JSON.stringify(message);
+            // Format based on message type
+            if (message.includes('Connected to bot server')) {
+                formattedMessage += `{green-fg}${message}{/green-fg}`;
+            } else if (message.includes('Error:') || message.includes('error:') || message.includes('WebSocket error')) {
+                formattedMessage += `{red-fg}${message}{/red-fg}`;
+            } else if (message.includes('Reconnecting')) {
+                formattedMessage += `{yellow-fg}${message}{/yellow-fg}`;
+            } else if (message.includes('Command sent:')) {
+                formattedMessage += `{cyan-fg}${message}{/cyan-fg}`;
+            } else {
+                formattedMessage += message;
+            }
         }
 
-        // Add timestamp and log
-        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
+        // Log to console box
+        this.consoleBox.log(formattedMessage);
         this.screen.render();
     }
 
@@ -287,7 +282,7 @@ class BotUI {
             const [, channel, username, text] = matches;
             const formattedMessage = `{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`;
             this.chatBox.log(formattedMessage);
-            this.screen.render();
+                this.screen.render();
         }
     }
 
@@ -310,7 +305,7 @@ class BotUI {
             this.updateCommandControl(status.commands);
         }
         
-        this.screen.render();
+                this.screen.render();
     }
 
     // Handle connection state updates
@@ -408,4 +403,4 @@ class BotUI {
     }
 }
 
-module.exports = BotUI;
+module.exports = BotUI; 

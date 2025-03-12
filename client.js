@@ -29,20 +29,41 @@ class BotClient {
                 this.handleMessage(message);
             } catch (err) {
                 console.error('Error parsing message:', err);
-                this.ui.logToConsole(`Error: ${err.message}`);
+                this.ui.logToConsole(`{red-fg}Error parsing message: ${err.message}{/red-fg}`);
             }
         });
 
         this.ws.on('close', () => {
-            console.log('Disconnected from bot server');
             this.isConnected = false;
-            this.ui.logToConsole('Disconnected from bot server');
+            this.ui.logToConsole('{red-fg}Disconnected from bot server{/red-fg}');
             this.handleReconnect();
         });
 
         this.ws.on('error', (error) => {
+            // Improved error handling with detailed error information
+            let errorMessage = 'WebSocket error';
+            
+            if (error.code) {
+                errorMessage += `: ${error.code}`;
+            }
+            
+            if (error.message) {
+                errorMessage += ` - ${error.message}`;
+            }
+            
+            if (error.errno) {
+                errorMessage += ` (errno: ${error.errno})`;
+            }
+            
+            if (error.address) {
+                errorMessage += ` - Address: ${error.address}:${error.port || '8080'}`;
+            }
+            
+            // Log detailed error to console box
+            this.ui.logToConsole(`{red-fg}${errorMessage}{/red-fg}`);
+            
+            // Also log to standard console for debugging
             console.error('WebSocket error:', error);
-            this.ui.logToConsole(`WebSocket error: ${error.message}`);
         });
 
         this.ws.on('ping', () => {
@@ -53,14 +74,17 @@ class BotClient {
     handleReconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            const message = `Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`;
-            console.log(message);
+            const message = `{yellow-fg}Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}{/yellow-fg}`;
             this.ui.logToConsole(message);
-            setTimeout(() => this.connect(), this.reconnectDelay);
-            this.reconnectDelay *= 1.5; // Exponential backoff
+            
+            // Add exponential backoff with jitter
+            const baseDelay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+            const jitter = Math.random() * 0.3 * baseDelay;
+            const delay = baseDelay + jitter;
+            
+            setTimeout(() => this.connect(), delay);
         } else {
-            const message = 'Max reconnection attempts reached';
-            console.error(message);
+            const message = '{red-fg}Max reconnection attempts reached. Please restart the application.{/red-fg}';
             this.ui.logToConsole(message);
         }
     }
