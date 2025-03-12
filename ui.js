@@ -1,294 +1,233 @@
 const blessed = require('blessed');
-const controlPanel = require('./controlPanel');  // Updated import
+const contrib = require('blessed-contrib');
 
 class BotUI {
     constructor(client) {
         this.client = client;
-        this.messageQueue = [];
-        this.consoleInitialized = false;
-
-        // Common styles for UI elements
-        this.commonBorder = {
-            type: 'line',
-            fg: 'cyan'
-        };
-
-        this.commonStyle = {
-            border: {
-                fg: 'cyan',
-                bold: true
-            },
-            scrollbar: {
-                bg: 'cyan',
-                fg: 'black'
-            },
-            focus: {
-                border: {
-                    fg: 'white',
-                    bold: true
-                }
-            }
-        };
-
         this.setupScreen();
+        this.chatMessages = [];
+        this.maxChatMessages = 100;
     }
 
     setupScreen() {
         // Create a screen object
         this.screen = blessed.screen({
             smartCSR: true,
-            title: '★ Twitch Bot Control Panel ★',
-            dockBorders: true
+            title: '★ MaxBot Control Panel ★',
+            dockBorders: true,
+            fullUnicode: true
         });
 
-        // Create the menu panel (left side)
-        this.menuList = blessed.list({
-            parent: this.screen,
-            width: '30%',
-            height: '100%',
-            left: 0,
-            top: 0,
-            border: this.commonBorder,
+        // Create a grid layout
+        this.grid = new contrib.grid({
+            rows: 12,
+            cols: 12,
+            screen: this.screen
+        });
+
+        // Create the chat panel (left side, top)
+        this.chatBox = this.grid.set(0, 0, 8, 8, blessed.log, {
+            label: ' Chat ',
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: ' ',
+                bg: 'cyan'
+            },
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
             style: {
-                ...this.commonStyle,
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            }
+        });
+
+        // Create the status panel (right side, top)
+        this.statusBox = this.grid.set(0, 8, 4, 4, blessed.box, {
+            label: ' Bot Status ',
+            tags: true,
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            }
+        });
+
+        // Create the command list (right side, middle)
+        this.commandList = this.grid.set(4, 8, 4, 4, blessed.list, {
+            label: ' Commands ',
+            tags: true,
+            items: [],
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
                 selected: {
                     bg: 'cyan',
-                    fg: 'black',
-                    bold: true
+                    fg: 'black'
                 },
-                item: {
-                    fg: 'white',
-                    hover: {
-                        bg: 'cyan',
-                        fg: 'black'
-                    }
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
                 }
-            },
-            label: {
-                text: ' Control Panel ',
-                side: 'center'
             },
             keys: true,
             vi: true,
-            mouse: true,
-            padding: {
-                left: 2,
-                right: 2
-            },
-            items: [
-                'Commands',
-                'Enable Command',
-                'Disable Command',
-                'Bot Status',
-                'Connected Channels',
-                'Clear Console',
-                'Restart Bot',
-                'Exit Bot'
-            ].map(item => `  ${item}  `),
-            align: 'left'
-        });
-
-        // Create the results panel (top right)
-        this.resultsBox = blessed.box({
-            parent: this.screen,
-            width: '70%',
-            height: '60%',
-            right: 0,
-            top: 0,
-            border: this.commonBorder,
-            style: {
-                ...this.commonStyle,
-                fg: 'white'
-            },
-            label: {
-                text: ' Status ',
-                side: 'center'
-            },
-            content: '{center}Select an option from the Control Panel{/center}',
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: true,
-            padding: 1,
-            tags: true
-        });
-
-        // Create the console panel (bottom right)
-        this.consoleBox = blessed.log({
-            parent: this.screen,
-            width: '70%',
-            height: '40%',
-            right: 0,
-            bottom: 0,
-            border: this.commonBorder,
-            style: {
-                ...this.commonStyle,
-                fg: 'white'
-            },
-            label: {
-                text: ' Console ',
-                side: 'center'
-            },
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: true,
-            padding: 1,
-            tags: true,
             mouse: true
         });
 
-        // Handle menu selection
-        this.menuList.on('select', async (item) => {
-            const selected = item.content.trim();
-            await this.handleMenuChoice(selected);
+        // Create the console/log panel (bottom)
+        this.consoleBox = this.grid.set(8, 0, 4, 12, blessed.log, {
+            label: ' Console ',
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: ' ',
+                bg: 'cyan'
+            },
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            }
         });
 
-        // Quit on Escape, q, or Control-C
+        // Create command input box
+        this.inputBox = blessed.textbox({
+            parent: this.screen,
+            bottom: 0,
+            left: 0,
+            height: 3,
+            width: '100%',
+            keys: true,
+            mouse: true,
+            inputOnFocus: true,
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            }
+        });
+
+        // Handle command input
+        this.inputBox.key(['enter'], () => {
+            const command = this.inputBox.getValue().trim();
+            if (command) {
+                if (command.startsWith('!')) {
+                    this.client.executeCommand(command, `#${process.env.CHANNEL_NAME}`);
+                } else {
+                    this.logToConsole('Commands must start with !');
+                }
+                this.inputBox.clearValue();
+                this.screen.render();
+            }
+        });
+
+        // Handle key events
         this.screen.key(['escape', 'q', 'C-c'], () => {
             this.confirmExit();
         });
 
-        // Focus on the menu
-        this.menuList.focus();
+        this.screen.key(['tab'], () => {
+            if (this.screen.focused === this.inputBox) {
+                this.commandList.focus();
+            } else if (this.screen.focused === this.commandList) {
+                this.chatBox.focus();
+            } else {
+                this.inputBox.focus();
+            }
+        });
+
+        // Focus on input by default
+        this.inputBox.focus();
 
         // Initial render
         this.screen.render();
     }
 
-    showResult(content) {
-        this.resultsBox.setContent(content);
+    addChatMessage(data) {
+        const timestamp = new Date(data.timestamp).toLocaleTimeString();
+        let message = `{gray-fg}[${timestamp}]{/gray-fg} `;
+        
+        // Add badges if available
+        if (data.badges) {
+            if (data.badges.broadcaster) message += '{red-fg}👑{/red-fg}';
+            if (data.badges.moderator) message += '{green-fg}⚔️{/green-fg}';
+            if (data.badges.vip) message += '{purple-fg}💎{/purple-fg}';
+            if (data.badges.subscriber) message += '{blue-fg}★{/blue-fg}';
+        }
+        
+        message += ` {yellow-fg}${data.username}{/yellow-fg}: ${data.message}`;
+        
+        this.chatMessages.push(message);
+        if (this.chatMessages.length > this.maxChatMessages) {
+            this.chatMessages.shift();
+        }
+        
+        this.chatBox.log(message);
+        this.screen.render();
+    }
+
+    updateStatus(status) {
+        let content = '{center}Bot Status{/center}\n\n';
+        content += `State: ${status.connectionState}\n`;
+        content += `Username: ${status.username}\n`;
+        content += `Channels: ${status.channels.join(', ')}\n`;
+        content += `Uptime: ${Math.floor(status.uptime)}s\n`;
+        content += `Commands: ${status.commandCount}\n`;
+        content += `Memory: ${Math.round(status.memory.heapUsed / 1024 / 1024)}MB`;
+        
+        this.statusBox.setContent(content);
+        this.screen.render();
+    }
+
+    updateConnectionState(state) {
+        const stateColors = {
+            connecting: 'yellow',
+            connected: 'green',
+            disconnected: 'red'
+        };
+        
+        const color = stateColors[state] || 'white';
+        this.logToConsole(`{${color}-fg}Bot ${state}{/${color}-fg}`);
+    }
+
+    updateCommands(commands) {
+        this.commandList.setItems(
+            commands.map(cmd => {
+                const status = cmd.enabled ? '{green-fg}✓{/green-fg}' : '{red-fg}✗{/red-fg}';
+                return `${status} ${cmd.trigger}`;
+            })
+        );
         this.screen.render();
     }
 
     logToConsole(message) {
         const timestamp = new Date().toLocaleTimeString();
-        this.consoleBox.log(`[${timestamp}] ${message}`);
+        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
         this.screen.render();
-    }
-
-    async handleMenuChoice(choice) {
-        switch (choice) {
-            case 'Commands':
-                this.client.requestCommands();
-                break;
-            case 'Enable Command':
-                await this.enableCommand();
-                break;
-            case 'Disable Command':
-                await this.disableCommand();
-                break;
-            case 'Bot Status':
-                this.client.requestStatus();
-                break;
-            case 'Connected Channels':
-                this.client.requestStatus();
-                break;
-            case 'Clear Console':
-                this.consoleBox.setContent('');
-                this.screen.render();
-                break;
-            case 'Restart Bot':
-                await this.confirmRestart();
-                break;
-            case 'Exit Bot':
-                await this.confirmExit();
-                break;
-        }
-    }
-
-    updateStatus(status) {
-        let content = 'Bot Status:\n\n';
-        content += `Connection State: ${status.connectionState}\n`;
-        content += `Username: ${status.username}\n`;
-        content += `Process ID: ${status.processId}\n\n`;
-        content += 'Connected Channels:\n';
-        status.channels.forEach(channel => {
-            content += `${channel}\n`;
-        });
-        this.showResult(content);
-    }
-
-    updateCommands(commands) {
-        let content = 'Available Commands:\n\n';
-        commands.forEach(cmd => {
-            const status = cmd.enabled ? 'Enabled' : 'Disabled';
-            const modOnly = cmd.modOnly ? ' (Mod Only)' : '';
-            content += `${cmd.trigger}: ${cmd.description}\n`;
-            content += `Status: ${status}${modOnly}\n\n`;
-        });
-        this.showResult(content);
-    }
-
-    async enableCommand() {
-        const commands = await this.client.requestCommands();
-        const disabledCommands = commands.filter(cmd => !cmd.enabled);
-        
-        if (disabledCommands.length === 0) {
-            this.showResult('No disabled commands found.');
-            return;
-        }
-
-        const promptBox = this.createPromptBox({
-            items: disabledCommands.map(cmd => `${cmd.trigger}: ${cmd.description}`),
-            label: ' Select Command to Enable (Esc to cancel) '
-        });
-
-        return new Promise((resolve) => {
-            promptBox.once('select', (item) => {
-                const commandName = item.content.split(':')[0].replace('!', '');
-                this.client.enableCommand(commandName);
-                promptBox.destroy();
-                this.menuList.focus();
-                this.screen.render();
-                resolve();
-            });
-
-            promptBox.key(['escape'], () => {
-                promptBox.destroy();
-                this.menuList.focus();
-                this.screen.render();
-                resolve();
-            });
-        });
-    }
-
-    async disableCommand() {
-        const commands = await this.client.requestCommands();
-        const enabledCommands = commands.filter(cmd => cmd.enabled);
-        
-        if (enabledCommands.length === 0) {
-            this.showResult('No enabled commands found.');
-            return;
-        }
-
-        const promptBox = this.createPromptBox({
-            items: enabledCommands.map(cmd => `${cmd.trigger}: ${cmd.description}`),
-            label: ' Select Command to Disable (Esc to cancel) '
-        });
-
-        return new Promise((resolve) => {
-            promptBox.once('select', (item) => {
-                const commandName = item.content.split(':')[0].replace('!', '');
-                this.client.disableCommand(commandName);
-                promptBox.destroy();
-                this.menuList.focus();
-                this.screen.render();
-                resolve();
-            });
-
-            promptBox.key(['escape'], () => {
-                promptBox.destroy();
-                this.menuList.focus();
-                this.screen.render();
-                resolve();
-            });
-        });
-    }
-
-    async confirmRestart() {
-        const confirm = await this.showConfirmDialog('Are you sure you want to restart the bot?');
-        if (confirm) {
-            this.client.restartBot();
-        }
     }
 
     async confirmExit() {
@@ -299,64 +238,23 @@ class BotUI {
         }
     }
 
-    createPromptBox(options) {
-        const box = blessed.list({
-            parent: this.screen,
-            width: '50%',
-            height: '50%',
-            top: 'center',
-            left: 'center',
-            border: this.commonBorder,
-            style: {
-                ...this.commonStyle,
-                selected: {
-                    bg: 'cyan',
-                    fg: 'black',
-                    bold: true
-                },
-                item: {
-                    fg: 'white',
-                    hover: {
-                        bg: 'cyan',
-                        fg: 'black'
-                    }
-                }
-            },
-            label: {
-                text: options.label,
-                side: 'center'
-            },
-            keys: true,
-            vi: true,
-            mouse: true,
-            scrollbar: true,
-            padding: 1,
-            items: options.items
-        });
-
-        box.focus();
-        this.screen.render();
-        return box;
-    }
-
     showConfirmDialog(message) {
         return new Promise((resolve) => {
             const dialog = blessed.box({
                 parent: this.screen,
-                border: this.commonBorder,
-                height: 'shrink',
-                width: '50%',
                 top: 'center',
                 left: 'center',
-                label: {
-                    text: ' * Confirm * ',
-                    side: 'center'
+                width: '50%',
+                height: 'shrink',
+                border: {
+                    type: 'line',
+                    fg: 'cyan'
                 },
                 style: {
+                    fg: 'white',
                     border: {
                         fg: 'cyan'
-                    },
-                    fg: 'white'
+                    }
                 },
                 padding: 1,
                 tags: true,
@@ -365,11 +263,9 @@ class BotUI {
 
             const cleanup = () => {
                 dialog.destroy();
-                this.menuList.focus();
                 this.screen.render();
             };
 
-            // Handle key events
             this.screen.key(['y', 'Y'], () => {
                 cleanup();
                 resolve(true);

@@ -1,6 +1,5 @@
 const WebSocket = require('ws');
 const BotUI = require('./ui');
-const controlPanel = require('./controlPanel');
 
 class BotClient {
     constructor() {
@@ -14,13 +13,15 @@ class BotClient {
     }
 
     connect() {
-        this.ws = new WebSocket('ws://localhost:8080');
+        const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+        this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
             console.log('Connected to bot server');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.requestStatus();
+            this.ui.showResult('Connected to bot server');
         });
 
         this.ws.on('message', (data) => {
@@ -29,28 +30,40 @@ class BotClient {
                 this.handleMessage(message);
             } catch (err) {
                 console.error('Error parsing message:', err);
+                this.ui.logToConsole(`Error: ${err.message}`);
             }
         });
 
         this.ws.on('close', () => {
             console.log('Disconnected from bot server');
             this.isConnected = false;
+            this.ui.showResult('Disconnected from bot server');
             this.handleReconnect();
         });
 
         this.ws.on('error', (error) => {
             console.error('WebSocket error:', error);
+            this.ui.logToConsole(`WebSocket error: ${error.message}`);
+        });
+
+        // Handle ping/pong for connection health
+        this.ws.on('ping', () => {
+            this.ws.pong();
         });
     }
 
     handleReconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(`Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+            const message = `Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`;
+            console.log(message);
+            this.ui.logToConsole(message);
             setTimeout(() => this.connect(), this.reconnectDelay);
             this.reconnectDelay *= 1.5; // Exponential backoff
         } else {
-            console.error('Max reconnection attempts reached');
+            const message = 'Max reconnection attempts reached';
+            console.error(message);
+            this.ui.logToConsole(message);
         }
     }
 
@@ -63,31 +76,28 @@ class BotClient {
                 this.ui.updateCommands(message.data);
                 break;
             case 'COMMAND_ENABLED':
-                this.ui.showResult(`Enabled command: ${message.command}`);
+                this.ui.logToConsole(`Enabled command: ${message.command}`);
                 this.requestCommands();
                 break;
             case 'COMMAND_DISABLED':
-                this.ui.showResult(`Disabled command: ${message.command}`);
+                this.ui.logToConsole(`Disabled command: ${message.command}`);
                 this.requestCommands();
+                break;
+            case 'COMMAND_RESULT':
+                this.ui.logToConsole(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
+                break;
+            case 'CHAT_MESSAGE':
+                this.ui.addChatMessage(message.data);
+                break;
+            case 'CONNECTION_STATE':
+                this.ui.updateConnectionState(message.state);
                 break;
             case 'ERROR':
                 console.error('Server error:', message.error);
-                this.ui.showResult(`Error: ${message.error}`);
+                this.ui.logToConsole(`Error: ${message.error}`);
                 break;
-            case 'CONNECTED':
-                this.ui.showResult('Bot connected to Twitch');
-                this.requestStatus();
-                break;
-            case 'DISCONNECTED':
-                this.ui.showResult(`Bot disconnected from Twitch: ${message.reason}`);
-                this.requestStatus();
-                break;
-            case 'RESTARTING':
-                this.ui.showResult('Bot is restarting...');
-                break;
-            case 'SHUTTING_DOWN':
-                this.ui.showResult('Bot is shutting down...');
-                break;
+            default:
+                console.warn('Unknown message type:', message.type);
         }
     }
 
@@ -95,7 +105,9 @@ class BotClient {
         if (this.isConnected) {
             this.ws.send(JSON.stringify(message));
         } else {
-            console.error('Not connected to server');
+            const error = 'Not connected to server';
+            console.error(error);
+            this.ui.logToConsole(error);
         }
     }
 
@@ -115,6 +127,14 @@ class BotClient {
         this.send({ type: 'DISABLE_COMMAND', command });
     }
 
+    executeCommand(command, channel) {
+        this.send({ 
+            type: 'EXECUTE_COMMAND',
+            command,
+            channel
+        });
+    }
+
     restartBot() {
         this.send({ type: 'RESTART_BOT' });
     }
@@ -124,5 +144,4 @@ class BotClient {
     }
 }
 
-// Start the client
-new BotClient(); 
+module.exports = BotClient; 
