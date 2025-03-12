@@ -83,6 +83,7 @@ class BotClient {
                         ...this.lastStatus,
                         commands: message.data
                     });
+                    this.ui.updateCommandControl(message.data);
                     break;
                 case 'COMMAND_ENABLED':
                     this.ui.logToConsole(`Command enabled: ${message.command}`);

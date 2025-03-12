@@ -22,8 +22,8 @@ class BotUI {
             screen: this.screen
         });
 
-        // Create the status panel (top)
-        this.statusBox = this.grid.set(0, 0, 3, 12, blessed.box, {
+        // Create the status panel (top left)
+        this.statusBox = this.grid.set(0, 0, 3, 8, blessed.box, {
             label: ' Bot Status ',
             tags: true,
             border: {
@@ -37,6 +37,41 @@ class BotUI {
                 }
             },
             padding: 1
+        });
+
+        // Create the command control panel (top right)
+        this.commandControlBox = this.grid.set(0, 8, 3, 4, blessed.list, {
+            label: ' Command Control ',
+            tags: true,
+            items: [],
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                selected: {
+                    bg: 'cyan',
+                    fg: 'black'
+                },
+                item: {
+                    fg: 'white'
+                },
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            keys: true,
+            vi: true,
+            mouse: true,
+            scrollbar: {
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
+            }
         });
 
         // Create the chat panel (middle)
@@ -129,6 +164,25 @@ class BotUI {
                 }
                 this.inputBox.clearValue();
                 this.screen.render();
+            }
+        });
+
+        // Handle command control selection
+        this.commandControlBox.on('select', (item) => {
+            const commandName = item.content.split(' ')[1].replace('!', '');
+            this.toggleCommand(commandName);
+        });
+
+        // Tab navigation
+        this.screen.key(['tab'], () => {
+            if (this.screen.focused === this.inputBox) {
+                this.commandControlBox.focus();
+            } else if (this.screen.focused === this.commandControlBox) {
+                this.chatBox.focus();
+            } else if (this.screen.focused === this.chatBox) {
+                this.consoleBox.focus();
+            } else {
+                this.inputBox.focus();
             }
         });
 
@@ -236,18 +290,15 @@ class BotUI {
         content += `{green-fg}Channels:{/green-fg} ${status.channels ? status.channels.join(', ') : 'none'}\n`;
         content += `{green-fg}Uptime:{/green-fg} ${Math.floor(status.uptime || 0)}s\n`;
         content += `{green-fg}Commands:{/green-fg} ${status.commandCount || 0}\n`;
-        content += `{green-fg}Memory:{/green-fg} ${Math.round((status.memory?.heapUsed || 0) / 1024 / 1024)}MB\n\n`;
-        
-        // Add command list to status panel
-        if (status.commands && Array.isArray(status.commands)) {
-            content += `{cyan-fg}Available Commands:{/cyan-fg}\n`;
-            status.commands.forEach(cmd => {
-                const cmdStatus = cmd.enabled ? '{green-fg}✓{/green-fg}' : '{red-fg}✗{/red-fg}';
-                content += `${cmdStatus} ${cmd.trigger}\n`;
-            });
-        }
+        content += `{green-fg}Memory:{/green-fg} ${Math.round((status.memory?.heapUsed || 0) / 1024 / 1024)}MB`;
         
         this.statusBox.setContent(content);
+        
+        // Update command control if commands are available
+        if (status.commands && Array.isArray(status.commands)) {
+            this.updateCommandControl(status.commands);
+        }
+        
         this.screen.render();
     }
 
@@ -306,6 +357,43 @@ class BotUI {
 
             this.screen.render();
         });
+    }
+
+    // Toggle command enabled/disabled
+    toggleCommand(commandName) {
+        if (!commandName) return;
+        
+        // Find command in current list
+        const commands = this.lastCommands || [];
+        const command = commands.find(cmd => cmd.name === commandName);
+        
+        if (command) {
+            if (command.enabled) {
+                this.client.disableCommand(commandName);
+                this.logToConsole(`Disabling command: ${commandName}`);
+            } else {
+                this.client.enableCommand(commandName);
+                this.logToConsole(`Enabling command: ${commandName}`);
+            }
+        }
+    }
+
+    // Update command control list
+    updateCommandControl(commands) {
+        if (!commands || !Array.isArray(commands) || !this.commandControlBox) return;
+        
+        // Store commands for toggle functionality
+        this.lastCommands = commands;
+        
+        // Update command list items
+        this.commandControlBox.setItems(
+            commands.map(cmd => {
+                const status = cmd.enabled ? '{green-fg}✓{/green-fg}' : '{red-fg}✗{/red-fg}';
+                return `${status} ${cmd.trigger}`;
+            })
+        );
+        
+        this.screen.render();
     }
 }
 
