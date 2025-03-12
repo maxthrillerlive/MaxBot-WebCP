@@ -23,7 +23,7 @@ class BotUI {
         });
 
         // Create the status panel (top left)
-        this.statusBox = this.grid.set(0, 0, 3, 8, blessed.box, {
+        this.statusBox = this.grid.set(0, 0, 6, 6, blessed.box, {
             label: ' Bot Status ',
             tags: true,
             border: {
@@ -40,7 +40,7 @@ class BotUI {
         });
 
         // Create the command control panel (top right)
-        this.commandControlBox = this.grid.set(0, 8, 3, 4, blessed.list, {
+        this.commandControlBox = this.grid.set(0, 6, 6, 6, blessed.list, {
             label: ' Command Control ',
             tags: true,
             items: [],
@@ -74,8 +74,8 @@ class BotUI {
             }
         });
 
-        // Create the chat panel (middle)
-        this.chatBox = this.grid.set(3, 0, 5, 12, blessed.log, {
+        // Create the chat panel (bottom left)
+        this.chatBox = this.grid.set(6, 0, 6, 6, blessed.log, {
             label: ' Chat ',
             tags: true,
             scrollable: true,
@@ -102,8 +102,8 @@ class BotUI {
             mouse: true
         });
 
-        // Create the console panel (bottom)
-        this.consoleBox = this.grid.set(8, 0, 4, 12, blessed.log, {
+        // Create the console panel (bottom right)
+        this.consoleBox = this.grid.set(6, 6, 6, 6, blessed.log, {
             label: ' Console ',
             tags: true,
             scrollable: true,
@@ -176,6 +176,8 @@ class BotUI {
         // Tab navigation
         this.screen.key(['tab'], () => {
             if (this.screen.focused === this.inputBox) {
+                this.statusBox.focus();
+            } else if (this.screen.focused === this.statusBox) {
                 this.commandControlBox.focus();
             } else if (this.screen.focused === this.commandControlBox) {
                 this.chatBox.focus();
