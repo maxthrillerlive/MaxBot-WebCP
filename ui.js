@@ -25,75 +25,8 @@ class BotUI {
             screen: this.screen
         });
 
-        // Create the chat panel (left side)
-        this.chatBox = this.grid.set(0, 0, 8, 8, blessed.log, {
-            label: ' Chat ',
-            tags: true,
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: {
-                ch: '│',
-                track: {
-                    bg: 'black'
-                },
-                style: {
-                    fg: 'cyan'
-                }
-            },
-            border: {
-                type: 'line',
-                fg: 'cyan'
-            },
-            style: {
-                fg: 'white',
-                border: {
-                    fg: 'cyan'
-                }
-            }
-        });
-
-        // Create the status panel (right side, top)
-        this.statusBox = this.grid.set(0, 8, 4, 4, blessed.box, {
-            label: ' Bot Status ',
-            tags: true,
-            border: {
-                type: 'line',
-                fg: 'cyan'
-            },
-            style: {
-                fg: 'white',
-                border: {
-                    fg: 'cyan'
-                }
-            }
-        });
-
-        // Create the command list (right side, middle)
-        this.commandList = this.grid.set(4, 8, 4, 4, blessed.list, {
-            label: ' Commands ',
-            tags: true,
-            items: [],
-            border: {
-                type: 'line',
-                fg: 'cyan'
-            },
-            style: {
-                selected: {
-                    bg: 'cyan',
-                    fg: 'black'
-                },
-                fg: 'white',
-                border: {
-                    fg: 'cyan'
-                }
-            },
-            keys: true,
-            vi: true,
-            mouse: true
-        });
-
-        // Create the console panel (bottom)
-        this.consoleBox = this.grid.set(8, 0, 4, 12, blessed.log, {
+        // Create the console/log panel (full width)
+        this.consoleBox = this.grid.set(0, 0, 12, 12, blessed.log, {
             label: ' Console ',
             tags: true,
             scrollable: true,
@@ -152,21 +85,6 @@ class BotUI {
                 }
                 this.inputBox.clearValue();
                 this.screen.render();
-            }
-        });
-
-        // Ensure proper layout
-        this.screen.append(this.consoleBox);
-        this.screen.append(this.inputBox);
-
-        // Focus handling
-        this.screen.key(['tab'], () => {
-            if (this.screen.focused === this.inputBox) {
-                this.commandList.focus();
-            } else if (this.screen.focused === this.commandList) {
-                this.chatBox.focus();
-            } else {
-                this.inputBox.focus();
             }
         });
 
