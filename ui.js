@@ -242,40 +242,20 @@ class BotUI {
 
         const timestamp = new Date().toLocaleTimeString();
 
-        // Handle different message types
-        if (message.startsWith('[DEBUG]')) {
-            // Skip all debug messages
-            return;
-        } 
-        else if (message.includes('info:')) {
-            // Handle chat messages
-            if (message.includes('<')) {
-                // Extract username and message
-                const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
-                if (matches) {
-                    const [, username, text] = matches;
-                    // Add chat message to chat window
-                    this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
-                    return;
-                }
-            }
-            // Handle command responses
-            if (message.includes('Available commands:')) {
-                const commands = message.split('Available commands:')[1].trim();
-                this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} Available commands: ${commands}`);
+        // Handle chat messages
+        if (message.includes('info:') && message.includes('<')) {
+            // Extract username and message
+            const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
+            if (matches) {
+                const [, username, text] = matches;
+                // Add chat message to chat window
+                this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
                 return;
             }
         }
-        else if (message === 'Control panel connected') {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
-        }
-        else if (message.includes('Connected to bot server')) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
-        }
-        else if (message.includes('Error:')) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {red-fg}${message}{/red-fg}`);
-        }
 
+        // Add timestamp to console messages
+        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
         this.screen.render();
     }
 

@@ -75,25 +75,31 @@ class BotClient {
                     this.ui.updateCommands(message.data);
                     break;
                 case 'COMMAND_ENABLED':
+                    console.info(`Command enabled: ${message.command}`);
+                    this.requestCommands();
+                    break;
                 case 'COMMAND_DISABLED':
+                    console.info(`Command disabled: ${message.command}`);
+                    this.requestCommands();
+                    break;
                 case 'COMMAND_RESULT':
-                    // Skip these messages as they're handled by the command list
+                    console.info(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
                     break;
                 case 'CHAT_MESSAGE':
-                    // Format chat messages
                     const chatMsg = `info: [${message.data.channel}] <${message.data.username}>: ${message.data.message}`;
-                    this.ui.logToConsole(chatMsg);
+                    console.log(chatMsg);
                     break;
                 case 'CONNECTION_STATE':
-                    this.ui.logToConsole(`Bot ${message.state}`);
+                    console.info(`Bot ${message.state}`);
                     break;
                 case 'ERROR':
-                    this.ui.logToConsole(`Error: ${message.error}`);
+                    console.error(`Bot error: ${message.error}`);
                     break;
+                default:
+                    console.warn(`Unknown message type: ${message.type}`);
             }
         } catch (err) {
             console.error('Error handling message:', err);
-            this.ui.logToConsole(`Error: ${err.message}`);
         }
     }
 
