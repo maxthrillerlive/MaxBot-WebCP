@@ -86,20 +86,19 @@ class BotClient {
                     console.info(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
                     break;
                 case 'CHAT_MESSAGE':
-                    const chatMsg = `info: [${message.data.channel}] <${message.data.username}>: ${message.data.message}`;
-                    console.log(chatMsg);
+                    this.ui.addChatMessage(message.data);
                     break;
                 case 'CONNECTION_STATE':
-                    console.info(`Bot ${message.state}`);
+                    this.ui.logToConsole(`Bot ${message.state}`);
                     break;
                 case 'ERROR':
-                    console.error(`Bot error: ${message.error}`);
+                    this.ui.logToConsole(`{red-fg}ERROR: ${message.error}{/red-fg}`);
                     break;
                 default:
                     console.warn(`Unknown message type: ${message.type}`);
             }
         } catch (err) {
-            console.error('Error handling message:', err);
+            this.ui.logToConsole(`{red-fg}ERROR: ${err.message}{/red-fg}`);
         }
     }
 

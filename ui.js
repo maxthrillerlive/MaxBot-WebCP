@@ -183,7 +183,7 @@ class BotUI {
     }
 
     addChatMessage(data) {
-        const timestamp = new Date(data.timestamp).toLocaleTimeString();
+        const timestamp = new Date().toLocaleTimeString();
         let message = `{gray-fg}[${timestamp}]{/gray-fg} `;
         
         // Add badges if available
@@ -197,7 +197,7 @@ class BotUI {
         // Add username and message
         message += `{yellow-fg}${data.username}{/yellow-fg}: ${data.message}`;
         
-        // Add to chat box
+        // Add to chat box only
         this.chatBox.log(message);
         this.screen.render();
     }
@@ -242,20 +242,27 @@ class BotUI {
 
         const timestamp = new Date().toLocaleTimeString();
 
-        // Handle chat messages
+        // If it's a chat message, redirect to chat panel
         if (message.includes('info:') && message.includes('<')) {
-            // Extract username and message
-            const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
+            const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
             if (matches) {
-                const [, username, text] = matches;
-                // Add chat message to chat window
+                const [, channel, username, text] = matches;
                 this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
+                this.screen.render();
                 return;
             }
         }
 
-        // Add timestamp to console messages
-        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
+        // Handle system messages
+        if (message.includes('Connected to bot server')) {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
+        } else if (message.includes('Available commands:')) {
+            const cleanMessage = message.replace(/info: \[.*?\] <.*?>: /, '');
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
+        } else if (!message.startsWith('[DEBUG]')) {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
+        }
+
         this.screen.render();
     }
 
