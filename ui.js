@@ -23,7 +23,7 @@ class BotUI {
         });
 
         // Create the status panel (top)
-        this.statusBox = this.grid.set(0, 0, 4, 12, blessed.box, {
+        this.statusBox = this.grid.set(0, 0, 3, 12, blessed.box, {
             label: ' Bot Status ',
             tags: true,
             border: {
@@ -39,8 +39,36 @@ class BotUI {
             padding: 1
         });
 
-        // Create the console panel (middle)
-        this.consoleBox = this.grid.set(4, 0, 8, 12, blessed.log, {
+        // Create the chat panel (middle)
+        this.chatBox = this.grid.set(3, 0, 5, 12, blessed.log, {
+            label: ' Chat ',
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
+            },
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            mouse: true
+        });
+
+        // Create the console panel (bottom)
+        this.consoleBox = this.grid.set(8, 0, 4, 12, blessed.log, {
             label: ' Console ',
             tags: true,
             scrollable: true,
@@ -137,14 +165,8 @@ class BotUI {
             } else if (message.includes('Error:')) {
                 formattedMessage = `{red-fg}${message}{/red-fg}`;
             } else if (message.includes('info:') && message.includes('<')) {
-                // Format chat messages
-                const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
-                if (matches) {
-                    const [, channel, username, text] = matches;
-                    formattedMessage = `{yellow-fg}${username}{/yellow-fg}: ${text}`;
-                } else {
-                    formattedMessage = message;
-                }
+                // Chat messages go to chat panel, not console
+                return;
             } else if (message.includes('Bot Status:')) {
                 // Skip status messages as they go to the status panel
                 return;
@@ -162,14 +184,46 @@ class BotUI {
         this.screen.render();
     }
 
-    // Handle chat messages - redirect to console
+    // Handle chat messages - send to chat panel
     addChatMessage(data) {
-        if (!data) return;
+        if (!data || !this.chatBox) return;
         
+        const timestamp = new Date().toLocaleTimeString();
         const username = data.username || 'unknown';
         const message = data.message || '';
         
-        this.logToConsole(`{yellow-fg}${username}{/yellow-fg}: ${message}`);
+        // Format chat message with timestamp and username
+        let formattedMessage = `{gray-fg}[${timestamp}]{/gray-fg} `;
+        
+        // Add badges if available
+        if (data.badges) {
+            if (data.badges.broadcaster) formattedMessage += '{red-fg}👑{/red-fg} ';
+            if (data.badges.moderator) formattedMessage += '{green-fg}⚔️{/green-fg} ';
+            if (data.badges.vip) formattedMessage += '{purple-fg}💎{/purple-fg} ';
+            if (data.badges.subscriber) formattedMessage += '{blue-fg}★{/blue-fg} ';
+        }
+        
+        formattedMessage += `{yellow-fg}${username}{/yellow-fg}: ${message}`;
+        
+        // Add to chat box
+        this.chatBox.log(formattedMessage);
+        this.screen.render();
+    }
+
+    // Process raw chat message
+    processChatMessage(message) {
+        if (!message || !this.chatBox) return;
+        
+        const timestamp = new Date().toLocaleTimeString();
+        
+        // Extract username and message from raw format
+        const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
+        if (matches) {
+            const [, channel, username, text] = matches;
+            const formattedMessage = `{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`;
+            this.chatBox.log(formattedMessage);
+            this.screen.render();
+        }
     }
 
     // Handle status updates - update status panel

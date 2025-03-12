@@ -73,6 +73,7 @@ class BotClient {
                     if (this.commands) {
                         message.data.commands = this.commands;
                     }
+                    this.lastStatus = message.data;
                     this.ui.updateStatus(message.data);
                     break;
                 case 'COMMANDS':
@@ -84,30 +85,32 @@ class BotClient {
                     });
                     break;
                 case 'COMMAND_ENABLED':
-                    console.info(`Command enabled: ${message.command}`);
+                    this.ui.logToConsole(`Command enabled: ${message.command}`);
                     this.requestCommands();
                     break;
                 case 'COMMAND_DISABLED':
-                    console.info(`Command disabled: ${message.command}`);
+                    this.ui.logToConsole(`Command disabled: ${message.command}`);
                     this.requestCommands();
                     break;
                 case 'COMMAND_RESULT':
-                    console.info(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
+                    this.ui.logToConsole(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
                     break;
                 case 'CHAT_MESSAGE':
+                    // Send chat messages to the chat panel
                     this.ui.addChatMessage(message.data);
                     break;
                 case 'CONNECTION_STATE':
-                    this.ui.logToConsole(`Bot ${message.state}`);
+                    this.ui.updateConnectionState(message.state);
                     break;
                 case 'ERROR':
                     this.ui.logToConsole(`Error: ${message.error}`);
                     break;
                 default:
-                    console.warn(`Unknown message type: ${message.type}`);
+                    this.ui.logToConsole(`Unknown message type: ${message.type}`);
             }
         } catch (err) {
             console.error('Error handling message:', err);
+            this.ui.logToConsole(`Error: ${err.message}`);
         }
     }
 
