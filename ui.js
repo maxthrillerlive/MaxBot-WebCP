@@ -4,9 +4,6 @@ const contrib = require('blessed-contrib');
 class BotUI {
     constructor(client) {
         this.client = client;
-        this.chatMessages = [];
-        this.maxChatMessages = 100;
-        this.messagesSeen = new Set(); // Add message deduplication
         this.setupScreen();
     }
 
@@ -18,14 +15,13 @@ class BotUI {
             fullUnicode: true
         });
 
-        this.grid = new contrib.grid({
-            rows: 12,
-            cols: 12,
-            screen: this.screen
-        });
-
-        // Create the console/log panel (full width)
-        this.consoleBox = this.grid.set(0, 0, 12, 12, blessed.log, {
+        // Create a single console panel
+        this.consoleBox = blessed.log({
+            parent: this.screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%-3', // Leave space for input box
             label: ' Console ',
             tags: true,
             scrollable: true,
@@ -48,7 +44,8 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
-            }
+            },
+            mouse: true
         });
 
         // Create command input box
@@ -79,6 +76,7 @@ class BotUI {
             if (command) {
                 if (command.startsWith('!')) {
                     this.client.executeCommand(command, `#${process.env.CHANNEL_NAME}`);
+                    this.logToConsole(`Command sent: ${command}`);
                 } else {
                     this.logToConsole('Commands must start with !');
                 }
@@ -92,6 +90,12 @@ class BotUI {
             this.confirmExit();
         });
 
+        // Clear console with Ctrl+L
+        this.screen.key(['C-l'], () => {
+            this.consoleBox.setContent('');
+            this.screen.render();
+        });
+
         // Focus input by default
         this.inputBox.focus();
 
@@ -99,92 +103,85 @@ class BotUI {
         this.screen.render();
     }
 
-    addChatMessage(data) {
-        const timestamp = new Date().toLocaleTimeString();
-        let message = `{gray-fg}[${timestamp}]{/gray-fg} `;
-        
-        // Add badges if available
-        if (data.badges) {
-            if (data.badges.broadcaster) message += '{red-fg}👑{/red-fg} ';
-            if (data.badges.moderator) message += '{green-fg}⚔️{/green-fg} ';
-            if (data.badges.vip) message += '{purple-fg}💎{/purple-fg} ';
-            if (data.badges.subscriber) message += '{blue-fg}★{/blue-fg} ';
-        }
-        
-        // Add username and message
-        message += `{yellow-fg}${data.username}{/yellow-fg}: ${data.message}`;
-        
-        // Add to chat box only
-        this.chatBox.log(message);
-        this.screen.render();
-    }
-
-    updateStatus(status) {
-        if (!this.statusBox) return; // Ensure statusBox is defined
-        let content = '';
-        content += `State: ${status.connectionState}\n`;
-        content += `Username: ${status.username}\n`;
-        content += `Channels: ${status.channels.join(', ')}\n`;
-        content += `Uptime: ${Math.floor(status.uptime)}s\n`;
-        content += `Commands: ${status.commandCount}\n`;
-        content += `Memory: ${Math.round(status.memory.heapUsed / 1024 / 1024)}MB`;
-        
-        this.statusBox.setContent(content);
-        this.screen.render();
-    }
-
-    updateConnectionState(state) {
-        const stateColors = {
-            connecting: 'yellow',
-            connected: 'green',
-            disconnected: 'red'
-        };
-        
-        const color = stateColors[state] || 'white';
-        this.logToConsole(`{${color}-fg}Bot ${state}{/${color}-fg}`);
-    }
-
-    updateCommands(commands) {
-        if (!this.commandList) return; // Ensure commandList is defined
-        this.commandList.setItems(
-            commands.map(cmd => {
-                const status = cmd.enabled ? '✓' : '✗';
-                return `${status} ${cmd.trigger}`;
-            })
-        );
-        this.screen.render();
-    }
-
+    // Unified method to log all messages to console
     logToConsole(message) {
-        // Skip empty messages
         if (!message || message.trim() === '') return;
+        if (!this.consoleBox) return;
 
         const timestamp = new Date().toLocaleTimeString();
+        let formattedMessage = '';
 
-        // If it's a chat message, redirect to chat panel
-        if (message.includes('info:') && message.includes('<')) {
-            const matches = message.match(/info: \[.*?\] <.*?>: (.*)/);
-            if (matches) {
-                const [, text] = matches;
-                this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${text}`);
-                this.screen.render();
-                return;
+        // Format based on message type
+        if (typeof message === 'string') {
+            if (message.includes('Connected to bot server')) {
+                formattedMessage = `{green-fg}${message}{/green-fg}`;
+            } else if (message.includes('Error:')) {
+                formattedMessage = `{red-fg}${message}{/red-fg}`;
+            } else if (message.includes('info:') && message.includes('<')) {
+                // Format chat messages
+                const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
+                if (matches) {
+                    const [, channel, username, text] = matches;
+                    formattedMessage = `{yellow-fg}${username}{/yellow-fg}: ${text}`;
+                } else {
+                    formattedMessage = message;
+                }
+            } else {
+                formattedMessage = message;
             }
+        } else {
+            formattedMessage = JSON.stringify(message);
         }
 
-        // Handle system messages
-        if (message.includes('Connected to bot server')) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
-        } else if (message.includes('Available commands:')) {
-            const cleanMessage = message.replace(/info: \[.*?\] <.*?>: /, '');
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
-        } else if (!message.startsWith('[DEBUG]')) {
-            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
-        }
-
+        // Add timestamp and log
+        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${formattedMessage}`);
         this.screen.render();
     }
 
+    // Handle chat messages - redirect to console
+    addChatMessage(data) {
+        if (!data) return;
+        
+        const username = data.username || 'unknown';
+        const message = data.message || '';
+        
+        this.logToConsole(`{yellow-fg}${username}{/yellow-fg}: ${message}`);
+    }
+
+    // Handle status updates - log to console
+    updateStatus(status) {
+        if (!status) return;
+        
+        let statusMsg = '{cyan-fg}Bot Status:{/cyan-fg}\n';
+        statusMsg += `State: ${status.connectionState}\n`;
+        statusMsg += `Username: ${status.username}\n`;
+        statusMsg += `Channels: ${status.channels ? status.channels.join(', ') : 'none'}\n`;
+        statusMsg += `Uptime: ${Math.floor(status.uptime || 0)}s\n`;
+        statusMsg += `Commands: ${status.commandCount || 0}\n`;
+        statusMsg += `Memory: ${Math.round((status.memory?.heapUsed || 0) / 1024 / 1024)}MB`;
+        
+        this.logToConsole(statusMsg);
+    }
+
+    // Handle command updates - log to console
+    updateCommands(commands) {
+        if (!commands || !Array.isArray(commands)) return;
+        
+        let commandsMsg = '{cyan-fg}Available Commands:{/cyan-fg}\n';
+        commands.forEach(cmd => {
+            const status = cmd.enabled ? '✓' : '✗';
+            commandsMsg += `${status} ${cmd.trigger}\n`;
+        });
+        
+        this.logToConsole(commandsMsg);
+    }
+
+    // Handle connection state updates
+    updateConnectionState(state) {
+        this.logToConsole(`Bot ${state}`);
+    }
+
+    // Exit confirmation
     async confirmExit() {
         const confirm = await this.showConfirmDialog('Are you sure you want to exit?');
         if (confirm) {
@@ -193,6 +190,7 @@ class BotUI {
         }
     }
 
+    // Show confirmation dialog
     showConfirmDialog(message) {
         return new Promise((resolve) => {
             const dialog = blessed.box({
@@ -233,13 +231,6 @@ class BotUI {
 
             this.screen.render();
         });
-    }
-
-    // Add method to clear console
-    clearConsole() {
-        this.consoleBox.setContent('');
-        this.messagesSeen.clear();
-        this.screen.render();
     }
 }
 
