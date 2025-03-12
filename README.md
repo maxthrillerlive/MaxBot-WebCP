@@ -1,44 +1,74 @@
-# MaxBot
+# MaxBot-TUI
 
-A customizable Twitch chat bot with a web-based control panel.
+A Terminal User Interface (TUI) control panel for MaxBot - A Twitch Chat Bot.
 
 ## Features
 
-- Real-time chat monitoring and interaction
-- Web-based control panel
-- Custom commands and automation
-- Secure OAuth2 authentication
-- WebSocket-based real-time updates
+- Real-time chat monitoring
+- Command execution interface
+- Bot status monitoring
+- Interactive terminal-based UI
+- WebSocket connection to MaxBot server
+- Customizable layout and themes
 
-## Setup
+## Installation
 
-1. Install dependencies:
 ```bash
-npm run install-all
+npm install
 ```
 
-2. Configure the bot:
-   - Go to [Twitch Developer Console](https://dev.twitch.tv/console)
-   - Create a new application
-   - Set OAuth Redirect URL to: http://localhost:3000/auth/callback
-   - Copy Client ID and Client Secret
-   - Update bot-server/.env with your credentials
+## Configuration
 
-3. Start the bot:
+Create a `.env` file in the root directory:
+
+```env
+BOT_SERVER_URL=ws://localhost:8080
+```
+
+## Usage
+
+Start the TUI:
 ```bash
 npm start
 ```
 
-For development:
+Development mode with auto-reload:
 ```bash
 npm run dev
 ```
 
-## Project Structure
+## Controls
 
-- `bot-server/` - Backend server that connects to Twitch chat
-- `bot-client/` - Web-based control panel frontend
-- `src/` - Shared resources and utilities
+- `Tab`: Switch between panels
+- `Enter`: Execute command
+- `Esc`: Clear input/Close popup
+- `Ctrl+C`: Exit application
+
+## Layout
+
+```
++------------------+------------------+
+|                  |                  |
+|   Chat Window    |   Status Panel   |
+|                  |                  |
+|                  |                  |
++------------------+------------------+
+|                  |                  |
+|  Command Input   |    Bot Logs     |
+|                  |                  |
++------------------+------------------+
+```
+
+## Development
+
+The TUI is built using:
+- `blessed` for the terminal interface
+- `blessed-contrib` for advanced widgets
+- `ws` for WebSocket communication
+
+## Related Projects
+
+- [MaxBot](https://github.com/maxthrillerlive/MaxBot) - The main bot server
 
 ## License
 

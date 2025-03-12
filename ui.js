@@ -1,42 +1,11 @@
 const blessed = require('blessed');
-const commandManager = require('./commandManager');
-
-// Create a global message buffer
-const messageBuffer = [];
-const originalConsole = {
-    log: console.log,
-    error: console.error,
-    info: console.info,
-    warn: console.warn
-};
-
-// Set up early console capture
-console.log = (...args) => {
-    messageBuffer.push({ type: 'log', args });
-    originalConsole.log.apply(console, args);
-};
-console.error = (...args) => {
-    messageBuffer.push({ type: 'error', args });
-    originalConsole.error.apply(console, args);
-};
-console.info = (...args) => {
-    messageBuffer.push({ type: 'info', args });
-    originalConsole.info.apply(console, args);
-};
-console.warn = (...args) => {
-    messageBuffer.push({ type: 'warn', args });
-    originalConsole.warn.apply(console, args);
-};
+const controlPanel = require('./controlPanel');  // Updated import
 
 class BotUI {
     constructor(client) {
         this.client = client;
-        this.isShuttingDown = false;
         this.messageQueue = [];
         this.consoleInitialized = false;
-
-        // Store original console methods
-        this.originalConsole = originalConsole;
 
         // Common styles for UI elements
         this.commonBorder = {
@@ -61,57 +30,7 @@ class BotUI {
             }
         };
 
-        // Set up console redirection immediately
-        this.redirectConsole();
-        
-        // Set up the screen after console redirection
         this.setupScreen();
-    }
-
-    redirectConsole() {
-        const redirect = (type, color, args) => {
-            const formattedMessage = this.formatMessage(color, args);
-            if (this.consoleInitialized && this.consoleBox) {
-                this.consoleBox.log(formattedMessage);
-                this.screen.render();
-            } else {
-                this.messageQueue.push(formattedMessage);
-            }
-            // Only call original console method for errors or if we're shutting down
-            if (type === 'error' || this.isShuttingDown) {
-                this.originalConsole[type].apply(console, args);
-            }
-        };
-
-        console.log = (...args) => redirect('log', 'white', args);
-        console.error = (...args) => redirect('error', 'red', args);
-        console.info = (...args) => redirect('info', 'green', args);
-        console.warn = (...args) => redirect('warn', 'yellow', args);
-    }
-
-    formatMessage(color, args) {
-        const timestamp = new Date().toLocaleTimeString();
-        const formattedArgs = args.map(arg => {
-            if (Array.isArray(arg)) {
-                return arg.map(item => this.formatArg(item)).join(', ');
-            }
-            return this.formatArg(arg);
-        }).join(' ');
-        return `{${color}-fg}[${timestamp}] ${formattedArgs}{/${color}-fg}`;
-    }
-
-    formatArg(arg) {
-        if (arg === null) return 'null';
-        if (arg === undefined) return 'undefined';
-        if (typeof arg === 'object') {
-            if (arg.trigger) return arg.trigger;
-            try {
-                return JSON.stringify(arg, null, 2);
-            } catch (e) {
-                return '[Object]';
-            }
-        }
-        return String(arg);
     }
 
     setupScreen() {
@@ -217,25 +136,9 @@ class BotUI {
             mouse: true
         });
 
-        // Process any buffered messages first
-        while (messageBuffer.length > 0) {
-            const msg = messageBuffer.shift();
-            const color = msg.type === 'error' ? 'red' : 
-                         msg.type === 'warn' ? 'yellow' : 
-                         msg.type === 'info' ? 'green' : 'white';
-            this.logToConsole(color, ...msg.args);
-        }
-
-        // Process any queued messages
-        this.consoleInitialized = true;
-        while (this.messageQueue.length > 0) {
-            const message = this.messageQueue.shift();
-            this.consoleBox.log(message);
-        }
-
         // Handle menu selection
         this.menuList.on('select', async (item) => {
-            const selected = item.content;
+            const selected = item.content.trim();
             await this.handleMenuChoice(selected);
         });
 
@@ -247,23 +150,8 @@ class BotUI {
         // Focus on the menu
         this.menuList.focus();
 
-        // Draw box characters for borders
-        this.screen.on('resize', () => {
-            this.screen.render();
-        });
-
         // Initial render
         this.screen.render();
-    }
-
-    logToConsole(color, ...args) {
-        const formattedMessage = this.formatMessage(color, args);
-        if (this.consoleBox) {
-            this.consoleBox.log(formattedMessage);
-            this.screen.render();
-        } else {
-            this.messageQueue.push(formattedMessage);
-        }
     }
 
     showResult(content) {
@@ -271,10 +159,16 @@ class BotUI {
         this.screen.render();
     }
 
+    logToConsole(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        this.consoleBox.log(`[${timestamp}] ${message}`);
+        this.screen.render();
+    }
+
     async handleMenuChoice(choice) {
-        switch (choice.trim()) {
+        switch (choice) {
             case 'Commands':
-                await this.viewCommands();
+                this.client.requestCommands();
                 break;
             case 'Enable Command':
                 await this.enableCommand();
@@ -283,10 +177,10 @@ class BotUI {
                 await this.disableCommand();
                 break;
             case 'Bot Status':
-                this.viewBotStatus();
+                this.client.requestStatus();
                 break;
             case 'Connected Channels':
-                this.viewConnectedChannels();
+                this.client.requestStatus();
                 break;
             case 'Clear Console':
                 this.consoleBox.setContent('');
@@ -301,8 +195,19 @@ class BotUI {
         }
     }
 
-    viewCommands() {
-        const commands = commandManager.listCommands();
+    updateStatus(status) {
+        let content = 'Bot Status:\n\n';
+        content += `Connection State: ${status.connectionState}\n`;
+        content += `Username: ${status.username}\n`;
+        content += `Process ID: ${status.processId}\n\n`;
+        content += 'Connected Channels:\n';
+        status.channels.forEach(channel => {
+            content += `${channel}\n`;
+        });
+        this.showResult(content);
+    }
+
+    updateCommands(commands) {
         let content = 'Available Commands:\n\n';
         commands.forEach(cmd => {
             const status = cmd.enabled ? 'Enabled' : 'Disabled';
@@ -314,7 +219,7 @@ class BotUI {
     }
 
     async enableCommand() {
-        const commands = commandManager.listCommands();
+        const commands = await this.client.requestCommands();
         const disabledCommands = commands.filter(cmd => !cmd.enabled);
         
         if (disabledCommands.length === 0) {
@@ -327,22 +232,17 @@ class BotUI {
             label: ' Select Command to Enable (Esc to cancel) '
         });
 
-        // Add escape key handler
-        promptBox.key(['escape'], () => {
-            promptBox.destroy();
-            this.menuList.focus();
-            this.screen.render();
-        });
-
-        promptBox.focus();
-        this.screen.render();
-
         return new Promise((resolve) => {
             promptBox.once('select', (item) => {
                 const commandName = item.content.split(':')[0].replace('!', '');
-                if (commandManager.enableCommand(commandName)) {
-                    this.showResult(`Enabled command: ${commandName}`);
-                }
+                this.client.enableCommand(commandName);
+                promptBox.destroy();
+                this.menuList.focus();
+                this.screen.render();
+                resolve();
+            });
+
+            promptBox.key(['escape'], () => {
                 promptBox.destroy();
                 this.menuList.focus();
                 this.screen.render();
@@ -352,7 +252,7 @@ class BotUI {
     }
 
     async disableCommand() {
-        const commands = commandManager.listCommands();
+        const commands = await this.client.requestCommands();
         const enabledCommands = commands.filter(cmd => cmd.enabled);
         
         if (enabledCommands.length === 0) {
@@ -365,22 +265,17 @@ class BotUI {
             label: ' Select Command to Disable (Esc to cancel) '
         });
 
-        // Add escape key handler
-        promptBox.key(['escape'], () => {
-            promptBox.destroy();
-            this.menuList.focus();
-            this.screen.render();
-        });
-
-        promptBox.focus();
-        this.screen.render();
-
         return new Promise((resolve) => {
             promptBox.once('select', (item) => {
                 const commandName = item.content.split(':')[0].replace('!', '');
-                if (commandManager.disableCommand(commandName)) {
-                    this.showResult(`Disabled command: ${commandName}`);
-                }
+                this.client.disableCommand(commandName);
+                promptBox.destroy();
+                this.menuList.focus();
+                this.screen.render();
+                resolve();
+            });
+
+            promptBox.key(['escape'], () => {
                 promptBox.destroy();
                 this.menuList.focus();
                 this.screen.render();
@@ -389,79 +284,23 @@ class BotUI {
         });
     }
 
-    viewBotStatus() {
-        const status = this.client.readyState();
-        const connectionState = status === 'OPEN' ? 'Connected' : 'Disconnected';
-        let content = 'Bot Status:\n\n';
-        content += `Connection State: ${connectionState}\n`;
-        content += `Username: ${process.env.BOT_USERNAME}\n`;
-        content += `Process ID: ${process.pid}`;
-        this.showResult(content);
-    }
-
-    viewConnectedChannels() {
-        const channels = this.client.getChannels();
-        let content = 'Connected Channels:\n\n';
-        channels.forEach(channel => {
-            content += `${channel}\n`;
-        });
-        this.showResult(content);
-    }
-
     async confirmRestart() {
         const confirm = await this.showConfirmDialog('Are you sure you want to restart the bot?');
         if (confirm) {
-            this.isShuttingDown = true;
-            try {
-                await this.client.say(process.env.CHANNEL_NAME, 'Bot is restarting...');
-                
-                // Clean up the lock file before spawning new instance
-                const fs = require('fs');
-                const path = require('path');
-                const lockFile = path.join(__dirname, '..', 'bot.lock');
-                if (fs.existsSync(lockFile)) {
-                    fs.unlinkSync(lockFile);
-                }
-                
-                // Start a new instance of the bot
-                const { spawn } = require('child_process');
-                const scriptPath = path.join(__dirname, 'index.js');
-                const child = spawn('node', [scriptPath], {
-                    detached: true,
-                    stdio: 'inherit'
-                });
-                
-                // Unref the child process so the parent can exit
-                child.unref();
-
-                // Give the new instance time to start
-                setTimeout(() => {
-                    process.kill(process.pid, 'SIGTERM');
-                }, 1000);
-            } catch (err) {
-                console.error('Error during restart:', err);
-                this.isShuttingDown = false;
-            }
+            this.client.restartBot();
         }
     }
 
     async confirmExit() {
         const confirm = await this.showConfirmDialog('Are you sure you want to exit?');
         if (confirm) {
-            this.isShuttingDown = true;
-            try {
-                await this.client.say(process.env.CHANNEL_NAME, 'Bot is shutting down...');
-            } catch (err) {
-                console.error('Error sending shutdown message:', err);
-            }
-            setTimeout(() => {
-                process.kill(process.pid, 'SIGTERM');
-            }, 500);
+            this.client.exitBot();
+            setTimeout(() => process.exit(0), 1000);
         }
     }
 
     createPromptBox(options) {
-        return blessed.list({
+        const box = blessed.list({
             parent: this.screen,
             width: '50%',
             height: '50%',
@@ -469,9 +308,7 @@ class BotUI {
             left: 'center',
             border: this.commonBorder,
             style: {
-                border: {
-                    fg: 'cyan'
-                },
+                ...this.commonStyle,
                 selected: {
                     bg: 'cyan',
                     fg: 'black',
@@ -494,8 +331,12 @@ class BotUI {
             mouse: true,
             scrollbar: true,
             padding: 1,
-            ...options
+            items: options.items
         });
+
+        box.focus();
+        this.screen.render();
+        return box;
     }
 
     showConfirmDialog(message) {
