@@ -10,7 +10,6 @@ class BotUI {
     }
 
     setupScreen() {
-        // Create a screen object
         this.screen = blessed.screen({
             smartCSR: true,
             title: '★ MaxBot Control Panel ★',
@@ -18,7 +17,6 @@ class BotUI {
             fullUnicode: true
         });
 
-        // Create a grid layout
         this.grid = new contrib.grid({
             rows: 12,
             cols: 12,
@@ -281,4 +279,4 @@ class BotUI {
     }
 }
 
-module.exports = BotUI; 
+module.exports = BotUI;

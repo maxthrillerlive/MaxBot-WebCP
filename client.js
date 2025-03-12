@@ -21,7 +21,7 @@ class BotClient {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.requestStatus();
-            this.ui.showResult('Connected to bot server');
+            this.ui.logToConsole('Connected to bot server');
         });
 
         this.ws.on('message', (data) => {
@@ -37,7 +37,7 @@ class BotClient {
         this.ws.on('close', () => {
             console.log('Disconnected from bot server');
             this.isConnected = false;
-            this.ui.showResult('Disconnected from bot server');
+            this.ui.logToConsole('Disconnected from bot server');
             this.handleReconnect();
         });
 
@@ -46,7 +46,6 @@ class BotClient {
             this.ui.logToConsole(`WebSocket error: ${error.message}`);
         });
 
-        // Handle ping/pong for connection health
         this.ws.on('ping', () => {
             this.ws.pong();
         });
@@ -144,4 +143,4 @@ class BotClient {
     }
 }
 
-module.exports = BotClient; 
+module.exports = BotClient;
