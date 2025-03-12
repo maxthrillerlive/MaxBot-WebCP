@@ -104,6 +104,11 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
+            },
+            wrap: true,
+            padding: {
+                left: 1,
+                right: 1
             }
         });
 
@@ -224,7 +229,24 @@ class BotUI {
 
     logToConsole(message) {
         const timestamp = new Date().toLocaleTimeString();
-        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
+        
+        // Clean up debug messages
+        let cleanMessage = message;
+        if (message.startsWith('[DEBUG]')) {
+            cleanMessage = message.replace('[DEBUG]', '').trim();
+            cleanMessage = `{gray-fg}DEBUG:{/gray-fg} ${cleanMessage}`;
+        } else if (message.includes('info:')) {
+            cleanMessage = message.replace(/\[.*?\]/g, '').trim();
+            cleanMessage = `{cyan-fg}INFO:{/cyan-fg} ${cleanMessage}`;
+        }
+
+        // Format system messages
+        if (message.includes('Connected to') || message.includes('Disconnected from')) {
+            cleanMessage = `{green-fg}${message}{/green-fg}`;
+        }
+
+        // Add timestamp
+        this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
         this.screen.render();
     }
 
