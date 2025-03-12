@@ -52,7 +52,7 @@ class BotUI {
         });
 
         // Create the status panel (top right)
-        this.statusBox = this.grid.set(0, 6, 6, 6, blessed.box, {
+        this.statusBox = this.grid.set(0, 6, 3, 6, blessed.box, {
             label: ' Bot Status ',
             tags: true,
             border: {
@@ -65,7 +65,37 @@ class BotUI {
                     fg: 'cyan'
                 }
             },
-            padding: 1
+            padding: 0
+        });
+
+        // Create the admin panel (middle right)
+        this.adminBox = this.grid.set(3, 6, 3, 6, blessed.list, {
+            label: ' Admin Panel ',
+            tags: true,
+            items: [
+                '{green-fg}Restart Bot{/green-fg}',
+                '{red-fg}Shutdown Bot{/red-fg}',
+                '{yellow-fg}Clear Console{/yellow-fg}'
+            ],
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                selected: {
+                    bg: 'cyan',
+                    fg: 'black'
+                },
+                item: {
+                    fg: 'white'
+                },
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            keys: true,
+            vi: true,
+            mouse: true
         });
 
         // Create the console panel (bottom left)
@@ -175,6 +205,27 @@ class BotUI {
             this.toggleCommand(commandName);
         });
 
+        // Handle admin panel selection
+        this.adminBox.on('select', async (item) => {
+            const action = item.content;
+            if (action.includes('Restart Bot')) {
+                const confirm = await this.showConfirmDialog('Are you sure you want to restart the bot?');
+                if (confirm) {
+                    this.logToConsole('{yellow-fg}Restarting bot...{/yellow-fg}');
+                    this.client.restartBot();
+                }
+            } else if (action.includes('Shutdown Bot')) {
+                const confirm = await this.showConfirmDialog('Are you sure you want to shutdown the bot?');
+                if (confirm) {
+                    this.logToConsole('{red-fg}Shutting down bot...{/red-fg}');
+                    this.client.exitBot();
+                }
+            } else if (action.includes('Clear Console')) {
+                this.consoleBox.setContent('');
+                this.logToConsole('{cyan-fg}Console cleared{/cyan-fg}');
+            }
+        });
+
         // Tab navigation
         this.screen.key(['tab'], () => {
             if (this.screen.focused === this.inputBox) {
@@ -182,6 +233,8 @@ class BotUI {
             } else if (this.screen.focused === this.chatBox) {
                 this.statusBox.focus();
             } else if (this.screen.focused === this.statusBox) {
+                this.adminBox.focus();
+            } else if (this.screen.focused === this.adminBox) {
                 this.consoleBox.focus();
             } else if (this.screen.focused === this.consoleBox) {
                 this.commandControlBox.focus();

@@ -175,11 +175,28 @@ class BotClient {
     }
 
     restartBot() {
-        this.send({ type: 'RESTART_BOT' });
+        if (this.isConnected) {
+            this.send({ type: 'RESTART_BOT' });
+            this.ui.logToConsole('Restart command sent to bot');
+        } else {
+            this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
+        }
     }
 
     exitBot() {
-        this.send({ type: 'EXIT_BOT' });
+        if (this.isConnected) {
+            this.send({ type: 'EXIT_BOT' });
+            this.ui.logToConsole('Shutdown command sent to bot');
+            
+            // Close the connection after a short delay
+            setTimeout(() => {
+                if (this.ws) {
+                    this.ws.close();
+                }
+            }, 1000);
+        } else {
+            this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
+        }
     }
 }
 
