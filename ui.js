@@ -18,13 +18,14 @@ class BotUI {
             fullUnicode: true
         });
 
+        // Create a grid layout
         this.grid = new contrib.grid({
             rows: 12,
             cols: 12,
             screen: this.screen
         });
 
-        // Create the chat panel (left side, top)
+        // Create the chat panel (left side)
         this.chatBox = this.grid.set(0, 0, 8, 8, blessed.log, {
             label: ' Chat ',
             tags: true,
@@ -48,13 +49,7 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
-            },
-            wrap: true,
-            padding: {
-                left: 1,
-                right: 1
-            },
-            mouse: true
+            }
         });
 
         // Create the status panel (right side, top)
@@ -97,7 +92,7 @@ class BotUI {
             mouse: true
         });
 
-        // Create the console/log panel (bottom)
+        // Create the console panel (bottom)
         this.consoleBox = this.grid.set(8, 0, 4, 12, blessed.log, {
             label: ' Console ',
             tags: true,
@@ -121,13 +116,7 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
-            },
-            wrap: true,
-            padding: {
-                left: 1,
-                right: 1
-            },
-            mouse: true
+            }
         });
 
         // Create command input box
@@ -166,11 +155,11 @@ class BotUI {
             }
         });
 
-        // Handle key events
-        this.screen.key(['escape', 'q', 'C-c'], () => {
-            this.confirmExit();
-        });
+        // Ensure proper layout
+        this.screen.append(this.consoleBox);
+        this.screen.append(this.inputBox);
 
+        // Focus handling
         this.screen.key(['tab'], () => {
             if (this.screen.focused === this.inputBox) {
                 this.commandList.focus();
@@ -181,21 +170,13 @@ class BotUI {
             }
         });
 
-        // Add to setupScreen()
-        this.screen.key(['C-l'], () => {
-            this.clearConsole();
+        // Exit handling
+        this.screen.key(['escape', 'q', 'C-c'], () => {
+            this.confirmExit();
         });
 
-        // Focus on input by default
+        // Focus input by default
         this.inputBox.focus();
-
-        // Ensure proper layout
-        this.screen.append(this.consoleBox);
-        this.screen.append(this.inputBox);
-
-        // Ensure console is above input box
-        this.consoleBox.setIndex(1);
-        this.inputBox.setIndex(0);
 
         // Initial render
         this.screen.render();
@@ -261,9 +242,8 @@ class BotUI {
 
         const timestamp = new Date().toLocaleTimeString();
 
-        // Handle chat messages and commands
+        // Handle chat messages
         if (message.includes('info:')) {
-            // Extract just the chat message
             if (message.includes('<')) {
                 const matches = message.match(/\[.*?\] info: \[.*?\] <(.*?)>: (.*)/);
                 if (matches) {
@@ -271,24 +251,19 @@ class BotUI {
                     this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
                 }
             } else if (message.includes('Available commands:')) {
-                // Clean up command list message
-                const cleanMessage = message.replace(/\[.*?\]/g, '').trim()
-                    .replace('info:', '')
-                    .replace('<max2d2>:', '');
+                const cleanMessage = message.replace(/\[.*?\] info: \[.*?\] <.*?>: /, '');
                 this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${cleanMessage}`);
             }
         }
-        // Skip all DEBUG messages
-        else if (message.startsWith('[DEBUG]')) {
-            return;
-        }
-        // Handle connection messages
+        // Handle system messages
         else if (message.includes('Connected to bot server')) {
             this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {green-fg}${message}{/green-fg}`);
         }
-        // Handle errors
         else if (message.includes('Error:')) {
             this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {red-fg}${message}{/red-fg}`);
+        }
+        else if (!message.startsWith('[DEBUG]')) {
+            this.consoleBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${message}`);
         }
 
         this.screen.render();
@@ -352,5 +327,4 @@ class BotUI {
     }
 }
 
-module.exports = BotUI;
 module.exports = BotUI;
