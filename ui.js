@@ -18,7 +18,6 @@ class BotUI {
             fullUnicode: true
         });
 
-        // Create a grid layout
         this.grid = new contrib.grid({
             rows: 12,
             cols: 12,
@@ -121,6 +120,7 @@ class BotUI {
     }
 
     updateStatus(status) {
+        if (!this.statusBox) return; // Ensure statusBox is defined
         let content = '';
         content += `State: ${status.connectionState}\n`;
         content += `Username: ${status.username}\n`;
@@ -145,6 +145,7 @@ class BotUI {
     }
 
     updateCommands(commands) {
+        if (!this.commandList) return; // Ensure commandList is defined
         this.commandList.setItems(
             commands.map(cmd => {
                 const status = cmd.enabled ? '✓' : '✗';
