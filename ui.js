@@ -22,8 +22,36 @@ class BotUI {
             screen: this.screen
         });
 
-        // Create the status panel (top left)
-        this.statusBox = this.grid.set(0, 0, 6, 6, blessed.box, {
+        // Create the chat panel (top left)
+        this.chatBox = this.grid.set(0, 0, 6, 6, blessed.log, {
+            label: ' Chat ',
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
+            },
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            mouse: true
+        });
+
+        // Create the status panel (top right)
+        this.statusBox = this.grid.set(0, 6, 6, 6, blessed.box, {
             label: ' Bot Status ',
             tags: true,
             border: {
@@ -39,8 +67,36 @@ class BotUI {
             padding: 1
         });
 
-        // Create the command control panel (top right)
-        this.commandControlBox = this.grid.set(0, 6, 6, 6, blessed.list, {
+        // Create the console panel (bottom left)
+        this.consoleBox = this.grid.set(6, 0, 6, 6, blessed.log, {
+            label: ' Console ',
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: '│',
+                track: {
+                    bg: 'black'
+                },
+                style: {
+                    fg: 'cyan'
+                }
+            },
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            mouse: true
+        });
+
+        // Create the command control panel (bottom right)
+        this.commandControlBox = this.grid.set(6, 6, 6, 6, blessed.list, {
             label: ' Command Control ',
             tags: true,
             items: [],
@@ -72,62 +128,6 @@ class BotUI {
                     fg: 'cyan'
                 }
             }
-        });
-
-        // Create the chat panel (bottom left)
-        this.chatBox = this.grid.set(6, 0, 6, 6, blessed.log, {
-            label: ' Chat ',
-            tags: true,
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: {
-                ch: '│',
-                track: {
-                    bg: 'black'
-                },
-                style: {
-                    fg: 'cyan'
-                }
-            },
-            border: {
-                type: 'line',
-                fg: 'cyan'
-            },
-            style: {
-                fg: 'white',
-                border: {
-                    fg: 'cyan'
-                }
-            },
-            mouse: true
-        });
-
-        // Create the console panel (bottom right)
-        this.consoleBox = this.grid.set(6, 6, 6, 6, blessed.log, {
-            label: ' Console ',
-            tags: true,
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: {
-                ch: '│',
-                track: {
-                    bg: 'black'
-                },
-                style: {
-                    fg: 'cyan'
-                }
-            },
-            border: {
-                type: 'line',
-                fg: 'cyan'
-            },
-            style: {
-                fg: 'white',
-                border: {
-                    fg: 'cyan'
-                }
-            },
-            mouse: true
         });
 
         // Create command input box
@@ -176,13 +176,13 @@ class BotUI {
         // Tab navigation
         this.screen.key(['tab'], () => {
             if (this.screen.focused === this.inputBox) {
-                this.statusBox.focus();
-            } else if (this.screen.focused === this.statusBox) {
-                this.commandControlBox.focus();
-            } else if (this.screen.focused === this.commandControlBox) {
                 this.chatBox.focus();
             } else if (this.screen.focused === this.chatBox) {
+                this.statusBox.focus();
+            } else if (this.screen.focused === this.statusBox) {
                 this.consoleBox.focus();
+            } else if (this.screen.focused === this.consoleBox) {
+                this.commandControlBox.focus();
             } else {
                 this.inputBox.focus();
             }
