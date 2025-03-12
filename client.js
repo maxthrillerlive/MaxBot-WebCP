@@ -69,10 +69,19 @@ class BotClient {
         try {
             switch (message.type) {
                 case 'STATUS':
+                    // Add commands to status data if available
+                    if (this.commands) {
+                        message.data.commands = this.commands;
+                    }
                     this.ui.updateStatus(message.data);
                     break;
                 case 'COMMANDS':
-                    this.ui.updateCommands(message.data);
+                    // Store commands for status updates
+                    this.commands = message.data;
+                    this.ui.updateStatus({
+                        ...this.lastStatus,
+                        commands: message.data
+                    });
                     break;
                 case 'COMMAND_ENABLED':
                     console.info(`Command enabled: ${message.command}`);

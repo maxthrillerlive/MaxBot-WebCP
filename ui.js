@@ -15,13 +15,32 @@ class BotUI {
             fullUnicode: true
         });
 
-        // Create a single console panel
-        this.consoleBox = blessed.log({
-            parent: this.screen,
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%-3', // Leave space for input box
+        // Create a grid layout
+        this.grid = new contrib.grid({
+            rows: 12,
+            cols: 12,
+            screen: this.screen
+        });
+
+        // Create the status panel (top)
+        this.statusBox = this.grid.set(0, 0, 4, 12, blessed.box, {
+            label: ' Bot Status ',
+            tags: true,
+            border: {
+                type: 'line',
+                fg: 'cyan'
+            },
+            style: {
+                fg: 'white',
+                border: {
+                    fg: 'cyan'
+                }
+            },
+            padding: 1
+        });
+
+        // Create the console panel (middle)
+        this.consoleBox = this.grid.set(4, 0, 8, 12, blessed.log, {
             label: ' Console ',
             tags: true,
             scrollable: true,
@@ -126,6 +145,11 @@ class BotUI {
                 } else {
                     formattedMessage = message;
                 }
+            } else if (message.includes('Bot Status:')) {
+                // Skip status messages as they go to the status panel
+                return;
+            } else if (message.includes('Available Commands:')) {
+                formattedMessage = `{cyan-fg}${message}{/cyan-fg}`;
             } else {
                 formattedMessage = message;
             }
@@ -148,32 +172,29 @@ class BotUI {
         this.logToConsole(`{yellow-fg}${username}{/yellow-fg}: ${message}`);
     }
 
-    // Handle status updates - log to console
+    // Handle status updates - update status panel
     updateStatus(status) {
-        if (!status) return;
+        if (!status || !this.statusBox) return;
         
-        let statusMsg = '{cyan-fg}Bot Status:{/cyan-fg}\n';
-        statusMsg += `State: ${status.connectionState}\n`;
-        statusMsg += `Username: ${status.username}\n`;
-        statusMsg += `Channels: ${status.channels ? status.channels.join(', ') : 'none'}\n`;
-        statusMsg += `Uptime: ${Math.floor(status.uptime || 0)}s\n`;
-        statusMsg += `Commands: ${status.commandCount || 0}\n`;
-        statusMsg += `Memory: ${Math.round((status.memory?.heapUsed || 0) / 1024 / 1024)}MB`;
+        let content = '';
+        content += `{green-fg}State:{/green-fg} ${status.connectionState}\n`;
+        content += `{green-fg}Username:{/green-fg} ${status.username}\n`;
+        content += `{green-fg}Channels:{/green-fg} ${status.channels ? status.channels.join(', ') : 'none'}\n`;
+        content += `{green-fg}Uptime:{/green-fg} ${Math.floor(status.uptime || 0)}s\n`;
+        content += `{green-fg}Commands:{/green-fg} ${status.commandCount || 0}\n`;
+        content += `{green-fg}Memory:{/green-fg} ${Math.round((status.memory?.heapUsed || 0) / 1024 / 1024)}MB\n\n`;
         
-        this.logToConsole(statusMsg);
-    }
-
-    // Handle command updates - log to console
-    updateCommands(commands) {
-        if (!commands || !Array.isArray(commands)) return;
+        // Add command list to status panel
+        if (status.commands && Array.isArray(status.commands)) {
+            content += `{cyan-fg}Available Commands:{/cyan-fg}\n`;
+            status.commands.forEach(cmd => {
+                const cmdStatus = cmd.enabled ? '{green-fg}✓{/green-fg}' : '{red-fg}✗{/red-fg}';
+                content += `${cmdStatus} ${cmd.trigger}\n`;
+            });
+        }
         
-        let commandsMsg = '{cyan-fg}Available Commands:{/cyan-fg}\n';
-        commands.forEach(cmd => {
-            const status = cmd.enabled ? '✓' : '✗';
-            commandsMsg += `${status} ${cmd.trigger}\n`;
-        });
-        
-        this.logToConsole(commandsMsg);
+        this.statusBox.setContent(content);
+        this.screen.render();
     }
 
     // Handle connection state updates
