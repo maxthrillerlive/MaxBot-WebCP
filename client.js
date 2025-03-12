@@ -92,13 +92,13 @@ class BotClient {
                     this.ui.logToConsole(`Bot ${message.state}`);
                     break;
                 case 'ERROR':
-                    this.ui.logToConsole(`{red-fg}ERROR: ${message.error}{/red-fg}`);
+                    this.ui.logToConsole(`Error: ${message.error}`);
                     break;
                 default:
                     console.warn(`Unknown message type: ${message.type}`);
             }
         } catch (err) {
-            this.ui.logToConsole(`{red-fg}ERROR: ${err.message}{/red-fg}`);
+            console.error('Error handling message:', err);
         }
     }
 

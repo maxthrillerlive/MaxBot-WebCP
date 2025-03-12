@@ -244,10 +244,10 @@ class BotUI {
 
         // If it's a chat message, redirect to chat panel
         if (message.includes('info:') && message.includes('<')) {
-            const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
+            const matches = message.match(/info: \[.*?\] <.*?>: (.*)/);
             if (matches) {
-                const [, channel, username, text] = matches;
-                this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} {yellow-fg}${username}{/yellow-fg}: ${text}`);
+                const [, text] = matches;
+                this.chatBox.log(`{gray-fg}[${timestamp}]{/gray-fg} ${text}`);
                 this.screen.render();
                 return;
             }
