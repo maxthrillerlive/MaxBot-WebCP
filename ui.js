@@ -47,11 +47,7 @@ class BotUI {
                     fg: 'cyan'
                 }
             },
-            align: 'left',
-            padding: {
-                left: 1,
-                right: 1
-            },
+            padding: 0,
             mouse: true
         });
 
@@ -97,11 +93,7 @@ class BotUI {
                     fg: 'cyan'
                 }
             },
-            align: 'left',
-            padding: {
-                left: 1,
-                right: 1
-            },
+            padding: 0,
             mouse: true
         });
 
@@ -232,12 +224,19 @@ class BotUI {
                 formattedMessage = `{red-fg}${message}{/red-fg}`;
             } else if (message.includes('info:') && message.includes('<')) {
                 // Chat messages go to chat panel, not console
+                const matches = message.match(/info: \[(.*?)\] <(.*?)>: (.*)/);
+                if (matches) {
+                    const [, channel, username, text] = matches;
+                    this.processChatMessage(message);
+                }
                 return;
             } else if (message.includes('Bot Status:')) {
                 // Skip status messages as they go to the status panel
                 return;
             } else if (message.includes('Available Commands:')) {
                 formattedMessage = `{cyan-fg}${message}{/cyan-fg}`;
+            } else if (message.includes('Command sent:')) {
+                formattedMessage = `{yellow-fg}${message}{/yellow-fg}`;
             } else {
                 formattedMessage = message;
             }

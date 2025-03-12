@@ -97,11 +97,12 @@ class BotClient {
                     this.ui.logToConsole(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
                     break;
                 case 'CHAT_MESSAGE':
-                    // Send chat messages to the chat panel
-                    this.ui.addChatMessage(message.data);
+                    // Format and send to chat panel
+                    const chatMsg = `info: [${message.data.channel}] <${message.data.username}>: ${message.data.message}`;
+                    this.ui.processChatMessage(chatMsg);
                     break;
                 case 'CONNECTION_STATE':
-                    this.ui.updateConnectionState(message.state);
+                    this.ui.logToConsole(`Bot ${message.state}`);
                     break;
                 case 'ERROR':
                     this.ui.logToConsole(`Error: ${message.error}`);
