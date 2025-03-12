@@ -47,6 +47,11 @@ class BotUI {
                     fg: 'cyan'
                 }
             },
+            align: 'left',
+            padding: {
+                left: 1,
+                right: 1
+            },
             mouse: true
         });
 
@@ -91,6 +96,11 @@ class BotUI {
                 border: {
                     fg: 'cyan'
                 }
+            },
+            align: 'left',
+            padding: {
+                left: 1,
+                right: 1
             },
             mouse: true
         });
