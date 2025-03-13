@@ -12,11 +12,11 @@ class BotUI {
         this.initialized = false;
         this.client = null;
         
-        // Add a safety timeout to force exit after 5 minutes
+        // Add a safety timeout to force exit after 10 seconds
         this.exitTimeout = setTimeout(() => {
             console.log('Safety timeout reached, forcing exit');
             process.exit(0);
-        }, 5 * 60 * 1000); // 5 minutes
+        }, 10 * 1000); // 10 seconds
     }
 
     setupScreen() {
@@ -122,7 +122,7 @@ class BotUI {
                 tags: true,
                 content: '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
                          '{center}1. Press ANY key 5 times quickly{/center}\n' +
-                         '{center}2. Wait 5 minutes for auto-exit{/center}\n' +
+                         '{center}2. Wait 10 seconds for auto-exit{/center}\n' +
                          '{center}3. In PuTTY, close the window{/center}\n' +
                          '{center}4. On server, use kill command{/center}',
                 border: {
@@ -144,7 +144,7 @@ class BotUI {
                 left: 0,
                 right: 0,
                 height: 1,
-                content: ' EMERGENCY EXIT: Press ANY key 5 times quickly or wait 5 minutes for auto-exit',
+                content: ' EMERGENCY EXIT: Press ANY key 5 times quickly or wait 10 seconds for auto-exit',
                 style: {
                     fg: 'white',
                     bg: 'red'
@@ -164,22 +164,22 @@ class BotUI {
             }, 1000);
             
             // Add a countdown timer for the auto-exit
-            let remainingMinutes = 5;
+            let remainingSeconds = 10;
             this.countdownInterval = setInterval(() => {
-                remainingMinutes--;
-                if (remainingMinutes <= 0) {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) {
                     clearInterval(this.countdownInterval);
                 } else {
                     this.adminBox.setContent(
                         '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
                         '{center}1. Press ANY key 5 times quickly{/center}\n' +
-                        `{center}2. Auto-exit in ${remainingMinutes} minutes{/center}\n` +
+                        `{center}2. Auto-exit in ${remainingSeconds} seconds{/center}\n` +
                         '{center}3. In PuTTY, close the window{/center}\n' +
                         '{center}4. On server, use kill command{/center}'
                     );
                 this.screen.render();
                 }
-            }, 60 * 1000); // Update every minute
+            }, 1000); // Update every second
             
             console.log('TUI setup complete');
             
