@@ -111,6 +111,18 @@ function connectToWebSocket() {
       }
     }, 10000);
     
+    // Handle WebSocket-level ping (automatically responds with pong)
+    ws.on('ping', () => {
+      addLog('Received WebSocket ping');
+      // The ws library automatically responds with a pong
+    });
+    
+    // Handle WebSocket-level pong
+    ws.on('pong', () => {
+      addLog('Received WebSocket pong');
+      appState.lastPongTime = Date.now();
+    });
+    
     ws.on('open', () => {
       clearTimeout(connectionTimeout);
       addLog('Connected to WebSocket server');
@@ -136,26 +148,45 @@ function connectToWebSocket() {
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
-            // Send GET_STATUS message instead of ping
-            const statusRequest = {
-              type: 'GET_STATUS',
+            // Send application-level ping message
+            const pingMsg = {
+              type: 'ping',
               client_id: clientId,
               timestamp: Date.now()
             };
             
-            ws.send(JSON.stringify(statusRequest));
+            ws.send(JSON.stringify(pingMsg));
             appState.lastPingTime = Date.now();
-            addLog('Sent periodic status request');
+            addLog('Sent ping message');
+            
+            // Also send a status request periodically
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                try {
+                  const statusRequest = {
+                    type: 'GET_STATUS',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                  };
+                  
+                  ws.send(JSON.stringify(statusRequest));
+                  addLog('Sent periodic status request');
+                } catch (e) {
+                  addLog(`Error sending status request: ${e.message}`);
+                }
+              }
+            }, 5000); // 5 seconds after ping
+            
           } catch (e) {
-            addLog(`Error sending status request: ${e.message}`);
+            addLog(`Error sending ping: ${e.message}`);
             clearInterval(pingInterval);
           }
         } else {
           // WebSocket is not open, clear the interval
-          addLog('WebSocket not open, clearing status interval');
+          addLog('WebSocket not open, clearing ping interval');
           clearInterval(pingInterval);
         }
-      }, 25000); // Send status request every 25 seconds
+      }, 20000); // Send ping every 20 seconds (server checks every 60)
     });
     
     ws.on('message', (data) => {
