@@ -71,7 +71,7 @@ class BotClient extends EventEmitter {
                     this.connectionState = 'disconnected';
                     this.handleReconnect();
                 }
-            }, 10000); // 10 second timeout
+            }, 10000);
             
             // Set up event handlers
             this.ws.on('open', () => {
