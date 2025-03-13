@@ -1,41 +1,78 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
 
-console.log('Searching for MaxBot-tui processes...');
+console.log('Forcing exit of MaxBot TUI...');
+
+// Try to read the PID file
+const pidFilePath = path.join(__dirname, 'maxbot-tui.pid');
 
 try {
-    // Find all Node.js processes
-    const output = execSync('ps aux | grep node').toString();
+  if (fs.existsSync(pidFilePath)) {
+    const pid = fs.readFileSync(pidFilePath, 'utf8').trim();
+    console.log(`Found PID file with PID: ${pid}`);
     
-    // Look for MaxBot-tui processes
-    const lines = output.split('\n').filter(line => 
-        line.includes('MaxBot-tui') && !line.includes('grep') && !line.includes('force-exit.js')
-    );
-    
-    if (lines.length === 0) {
-        console.log('No MaxBot-tui processes found.');
-        return;
-    }
-    
-    console.log(`Found ${lines.length} MaxBot-tui processes. Killing them...`);
-    
-    // Kill each process
-    for (const line of lines) {
-        const parts = line.trim().split(/\s+/);
-        const pid = parts[1];
-        
-        console.log(`Killing process ${pid}`);
-        try {
-            execSync(`kill -9 ${pid}`);
-            console.log(`Process ${pid} killed.`);
-        } catch (error) {
-            console.error(`Error killing process ${pid}:`, error.message);
+    // Try to kill the process
+    if (process.platform === 'win32') {
+      exec(`taskkill /F /PID ${pid}`, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error killing process: ${error.message}`);
+          killAllNodeProcesses();
+        } else {
+          console.log(`Process ${pid} terminated successfully`);
+          try {
+            fs.unlinkSync(pidFilePath);
+            console.log('PID file removed');
+          } catch (e) {
+            console.error(`Error removing PID file: ${e.message}`);
+          }
         }
+      });
+    } else {
+      // Linux/Mac
+      exec(`kill -9 ${pid}`, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error killing process: ${error.message}`);
+          killAllNodeProcesses();
+        } else {
+          console.log(`Process ${pid} terminated successfully`);
+          try {
+            fs.unlinkSync(pidFilePath);
+            console.log('PID file removed');
+          } catch (e) {
+            console.error(`Error removing PID file: ${e.message}`);
+          }
+        }
+      });
     }
-    
-    console.log('All MaxBot-tui processes should be terminated.');
-    
+  } else {
+    console.log('PID file not found, killing all Node.js processes');
+    killAllNodeProcesses();
+  }
 } catch (error) {
-    console.error('Error:', error.message);
+  console.error(`Error: ${error.message}`);
+  killAllNodeProcesses();
+}
+
+function killAllNodeProcesses() {
+  if (process.platform === 'win32') {
+    exec('taskkill /F /IM node.exe', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error killing all Node.js processes: ${error.message}`);
+      } else {
+        console.log('All Node.js processes terminated');
+      }
+    });
+  } else {
+    // Linux/Mac
+    exec('pkill -9 node', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error killing all Node.js processes: ${error.message}`);
+      } else {
+        console.log('All Node.js processes terminated');
+      }
+    });
+  }
 } 
