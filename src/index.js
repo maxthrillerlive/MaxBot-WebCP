@@ -8,27 +8,48 @@ const BotUI = require('../ui');
 const BotClient = require('../client');
 
 // Start the application
-console.log('Starting MaxBot TUI...');
+function startApp() {
+  console.log('Starting MaxBot TUI...');
 
-try {
-  // Create and initialize the UI
-  const ui = new BotUI();
-  console.log('UI instance created:', ui ? 'Success' : 'Failed');
-  
-  // Set up the screen
-  ui.setupScreen();
-  console.log('Screen setup complete');
-  
-  // Create the client and connect to the server
-  const client = new BotClient(ui);
-  console.log('Client created with UI');
-  
-  // No need to call client.connect() - it's already connecting in the constructor
-  
-} catch (error) {
-  console.error('Error starting application:', error);
-  process.exit(1);
+  try {
+    // Create and initialize the UI
+    const ui = new BotUI();
+    console.log('UI instance created:', ui ? 'Success' : 'Failed');
+    
+    // Set up the screen
+    ui.setupScreen();
+    console.log('Screen setup complete');
+    
+    // Create the client and connect to the server
+    const client = new BotClient(ui);
+    console.log('Client created with UI');
+    
+    // If there are any functions that need the client, pass it explicitly
+    setupEventHandlers(ui, client);
+    
+  } catch (error) {
+    console.error('Error starting application:', error);
+    process.exit(1);
+  }
 }
+
+function setupEventHandlers(ui, client) {
+  // Example of properly passing the client to functions that need it
+  // Set up any event handlers or other functionality that needs the client
+  console.log('Setting up event handlers with client');
+  
+  // Example: Set up exit handler
+  process.on('SIGINT', () => {
+    console.log('Received SIGINT, shutting down...');
+    if (client && client.ws) {
+      client.ws.close();
+    }
+    process.exit(0);
+  });
+}
+
+// Start the application
+startApp();
 
 // Override console methods to redirect to our UI
 function setupConsoleOverride(client) {
