@@ -191,25 +191,45 @@ function connectToWebSocket() {
     
     ws.on('message', (data) => {
       try {
+        // Log the raw data for debugging
+        console.log('Received raw data:', data.toString());
+        
         const message = JSON.parse(data);
+        
+        // Check if the message has a type
+        if (!message.type) {
+            addLog(`Received message without type: ${JSON.stringify(message)}`);
+            return;
+        }
+        
         appState.wsMessages++;
         
         // Handle different message types
-        if (message.type === 'pong') {
-          appState.lastPongTime = Date.now();
-          addLog('Received pong response');
-        } else if (message.type === 'status') {
-          addLog(`Received status update`);
-        } else if (message.type === 'register_ack') {
-          addLog(`Registration acknowledged by server`);
-        } else if (message.type === 'error') {
-          addLog(`Received error from server: ${message.message || 'Unknown error'}`);
-          appState.serverErrors.push({
-            time: new Date().toISOString(),
-            error: message.message || 'Unknown error'
-          });
-        } else {
-          addLog(`Received message of type: ${message.type}`);
+        switch (message.type) {
+            case 'pong':
+                appState.lastPongTime = Date.now();
+                addLog('Received pong response');
+                break;
+                
+            case 'STATUS':
+                addLog(`Received status update`);
+                // Process status update
+                break;
+                
+            case 'register_ack':
+                addLog(`Registration acknowledged by server`);
+                break;
+                
+            case 'ERROR':
+                addLog(`Received error from server: ${message.error || 'Unknown error'}`);
+                appState.serverErrors.push({
+                    time: new Date().toISOString(),
+                    error: message.error || 'Unknown error'
+                });
+                break;
+                
+            default:
+                addLog(`Received message of type: ${message.type}`);
         }
       } catch (error) {
         addLog(`Error processing message: ${error.message}`);
