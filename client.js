@@ -126,6 +126,42 @@ class BotClient extends EventEmitter {
                         return;
                     }
                     
+                    // Extract channel information if available
+                    if (message.data && message.data.channels && message.data.channels.length > 0) {
+                        // Update the bot status with the channel information
+                        this.botStatus.channel = message.data.channels[0];
+                        
+                        // Update the UI
+                        if (this.ui && typeof this.ui.updateStatus === 'function') {
+                            this.ui.updateStatus(this.botStatus);
+                        }
+                    } else if (message.channels && message.channels.length > 0) {
+                        // Update the bot status with the channel information
+                        this.botStatus.channel = message.channels[0];
+                        
+                        // Update the UI
+                        if (this.ui && typeof this.ui.updateStatus === 'function') {
+                            this.ui.updateStatus(this.botStatus);
+                        }
+                    }
+                    
+                    // Extract uptime information if available
+                    if (message.data && message.data.uptime) {
+                        this.botStatus.uptime = message.data.uptime;
+                        
+                        // Update the UI
+                        if (this.ui && typeof this.ui.updateStatus === 'function') {
+                            this.ui.updateStatus(this.botStatus);
+                        }
+                    } else if (message.uptime) {
+                        this.botStatus.uptime = message.uptime;
+                        
+                        // Update the UI
+                        if (this.ui && typeof this.ui.updateStatus === 'function') {
+                            this.ui.updateStatus(this.botStatus);
+                        }
+                    }
+                    
                     // Handle different message types
                     if (message.type === 'status' || message.type === 'STATUS') {
                         // The server might be sending status updates directly
