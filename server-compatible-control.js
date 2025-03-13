@@ -1157,9 +1157,9 @@ app.get('/', (req, res) => {
       function updateChat() {
         fetch('/api/chat?count=100')
           .then(response => response.json())
-          .then(messages => {
+          .then(data => {
             chatContainer.innerHTML = '';
-            messages.forEach(message => {
+            data.forEach(item => {
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
@@ -1177,7 +1177,7 @@ app.get('/', (req, res) => {
               timeSpan.style.color = '#888';
               timeSpan.style.marginRight = '8px';
               timeSpan.style.fontSize = '16px';
-              timeSpan.textContent = \`[${new Date(message.time).toLocaleTimeString()}]\`;
+              timeSpan.textContent = \`[${new Date(item.time).toLocaleTimeString()}]\`;
               chatLine.appendChild(timeSpan);
               
               // Add username with bold styling
@@ -1186,14 +1186,14 @@ app.get('/', (req, res) => {
               usernameSpan.style.color = '#4CAF50';
               usernameSpan.style.marginRight = '8px';
               usernameSpan.style.fontSize = '18px';
-              usernameSpan.textContent = message.username;
+              usernameSpan.textContent = item.username;
               chatLine.appendChild(usernameSpan);
               
               // Add message on the same line
               const messageSpan = document.createElement('span');
               messageSpan.style.fontSize = '18px';
               messageSpan.style.wordBreak = 'break-word';
-              messageSpan.textContent = message.message;
+              messageSpan.textContent = item.message;
               chatLine.appendChild(messageSpan);
               
               chatEntry.appendChild(chatLine);
