@@ -1,16 +1,30 @@
 const WebSocket = require('ws');
 const BotUI = require('./ui');
+const EventEmitter = require('events');
+const fedora = require('./fedora');
 
-class BotClient {
-    constructor() {
+class BotClient extends EventEmitter {
+    constructor(ui) {
+        super();
+        this.ui = ui;
         this.ws = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 1000;
+        this.maxReconnectDelay = 30000;
+        this.reconnectTimer = null;
         this.connectionState = 'disconnected';
         this.restartInProgress = false;
-        this.ui = new BotUI(this);
+        this.botStatus = {
+            connected: false,
+            channel: '',
+            uptime: 0,
+            commands: []
+        };
+        
+        // Initialize Fedora integration if available
+        fedora.initialize(this, ui);
         this.connect();
     }
 
@@ -57,16 +71,14 @@ class BotClient {
                 
                 // Handle D-Bus messages
                 if (message.type === 'dbus-message') {
-                    const { sender, message: content, timestamp } = message.data;
-                    this.ui.logToConsole(`{magenta-fg}[D-Bus] ${sender}:{/magenta-fg} ${content}`);
-                    this.ui.screen.render();
+                    // Emit event for Fedora integration to handle
+                    this.emit('dbus-message', message.data);
                 }
                 
                 // Handle D-Bus notifications
                 if (message.type === 'dbus-notification') {
-                    const { title, body, timestamp } = message.data;
-                    this.ui.logToConsole(`{magenta-fg}[Notification] ${title}:{/magenta-fg} ${body}`);
-                    this.ui.screen.render();
+                    // Emit event for Fedora integration to handle
+                    this.emit('dbus-notification', message.data);
                 }
                 
                 this.handleMessage(message);
@@ -344,6 +356,15 @@ class BotClient {
             this.ws.send(JSON.stringify({
                 type: 'send-dbus-message',
                 data: { sender, content }
+            }));
+        }
+    }
+
+    sendDBusNotification(title, body, icon = '') {
+        if (this.isConnected) {
+            this.ws.send(JSON.stringify({
+                type: 'send-dbus-notification',
+                data: { title, body, icon }
             }));
         }
     }

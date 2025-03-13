@@ -4,6 +4,7 @@ const contrib = require('blessed-contrib');
 class BotUI {
     constructor(client) {
         this.client = client;
+        this.blessed = blessed;
         this.setupScreen();
     }
 
