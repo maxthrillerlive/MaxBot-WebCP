@@ -1186,13 +1186,33 @@ app.get('/', (req, res) => {
               timeSpan.style.fontSize = '16px';
               timeSpan.textContent = '[' + new Date(entry.time).toLocaleTimeString() + ']';
               
-              // Create username
+              // Create badges (simple text-based version)
+              let badgeText = '';
+              
+              // Check username for special badges
+              if (entry.username.toLowerCase() === 'max2d2') {
+                badgeText += '🤖 '; // Bot badge
+              }
+              
+              if (entry.username.toLowerCase() === 'maxthriller') {
+                badgeText += '📺 '; // Broadcaster badge
+              }
+              
+              // Check badges object if it exists
+              if (entry.badges) {
+                if (entry.badges.moderator) badgeText += '🛡️ ';
+                if (entry.badges.vip) badgeText += '⭐ ';
+                if (entry.badges.subscriber) badgeText += '💎 ';
+                if (entry.badges.premium) badgeText += '�� ';
+              }
+              
+              // Create username with badges
               const usernameSpan = document.createElement('span');
               usernameSpan.style.fontWeight = 'bold';
               usernameSpan.style.color = '#4CAF50';
               usernameSpan.style.marginRight = '8px';
               usernameSpan.style.fontSize = '18px';
-              usernameSpan.textContent = entry.username;
+              usernameSpan.textContent = badgeText + entry.username;
               
               // Create message
               const messageSpan = document.createElement('span');
