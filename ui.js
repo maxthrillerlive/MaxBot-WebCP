@@ -1,6 +1,7 @@
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 const dotenv = require('dotenv');
+const childProcess = require('child_process');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -20,12 +21,12 @@ class BotUI {
         // Change the safety timeout to 15 seconds
         console.log('Setting up safety timeout (15 seconds)');
         this.safetyTimeout = setTimeout(() => {
-            console.log('Safety timeout reached, forcing exit');
+            console.log('Safety timeout reached, executing kill command');
             try {
-                console.log('Attempting to kill process with SIGKILL');
-                process.kill(process.pid, 'SIGKILL');
+                // Execute kill command directly
+                childProcess.execSync(`kill -9 ${process.pid}`);
             } catch (e) {
-                console.log('SIGKILL failed, using process.exit(1)');
+                // This should never be reached, but just in case
                 process.exit(1);
             }
         }, 15 * 1000); // 15 seconds
