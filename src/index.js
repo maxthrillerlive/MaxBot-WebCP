@@ -8,34 +8,25 @@ const BotUI = require('../ui');
 const BotClient = require('../client');
 
 // Start the application
-function startApp() {
-  console.log('Starting MaxBot TUI...');
+console.log('Starting MaxBot TUI...');
 
-  try {
-    // Create and initialize the UI
-    const ui = new BotUI();
-    console.log('UI instance created:', ui ? 'Success' : 'Failed');
-    
-    // Set up the screen
-    ui.setupScreen();
-    console.log('Screen setup complete');
-    
-    // Create the client and connect to the server
-    const client = new BotClient(ui);
-    console.log('Client created with UI');
-    
-    // If there are any functions that need the client, pass it explicitly
-    setupEventHandlers(ui, client);
-    
-  } catch (error) {
-    console.error('Error starting application:', error);
-    process.exit(1);
-  }
-}
+// Create and initialize the UI
+const ui = new BotUI();
+console.log('UI instance created:', ui ? 'Success' : 'Failed');
 
+// Set up the screen
+ui.setupScreen();
+console.log('Screen setup complete');
+
+// Create the client and connect to the server
+const client = new BotClient(ui);
+console.log('Client created with UI');
+
+// Set up event handlers with the client
+setupEventHandlers(ui, client);
+
+// Function to set up event handlers
 function setupEventHandlers(ui, client) {
-  // Example of properly passing the client to functions that need it
-  // Set up any event handlers or other functionality that needs the client
   console.log('Setting up event handlers with client');
   
   // Example: Set up exit handler
@@ -46,10 +37,17 @@ function setupEventHandlers(ui, client) {
     }
     process.exit(0);
   });
+  
+  // Add any other event handlers here
 }
 
-// Start the application
-startApp();
+// Error handling for uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  if (ui && ui.isInitialized()) {
+    ui.logToConsole(`Error: ${error.message}`);
+  }
+});
 
 // Override console methods to redirect to our UI
 function setupConsoleOverride(client) {
@@ -114,14 +112,6 @@ function setupConsoleOverride(client) {
 
 // Start the client with console override
 const originalConsole = setupConsoleOverride(client);
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    if (client && client.ui) {
-        client.ui.logToConsole(`{red-fg}UNCAUGHT ERROR:{/red-fg} ${error.message}`);
-    }
-    console.error('Uncaught Exception:', error);
-});
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
