@@ -4,17 +4,17 @@ class StatusPanel {
   constructor(grid, row, col, rowSpan, colSpan) {
     console.log('Creating StatusPanel');
     this.panel = grid.set(row, col, rowSpan, colSpan, blessed.box, {
-      label: ' Bot Status ',
+      label: ' Bot Status (Disabled) ',
       tags: true,
-      content: 'Initializing...',
+      content: '{center}Status panel is disabled{/center}',
       border: {
         type: 'line',
-        fg: 'cyan'
+        fg: 'gray'
       },
       style: {
-        fg: 'white',
+        fg: 'gray',
         border: {
-          fg: 'cyan'
+          fg: 'gray'
         }
       }
     });
