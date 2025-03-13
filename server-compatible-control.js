@@ -38,7 +38,8 @@ const appState = {
     botMemoryUsage: {},
     botUsername: '',
     botChannels: [],
-    connectionHistory: []
+    connectionHistory: [],
+    botStatus: null
   }
 };
 
@@ -268,6 +269,9 @@ function connectToWebSocket() {
             appState.stats.botMemoryUsage = message.memory || {};
             appState.stats.botUptime = message.uptime || 0;
             
+            // Store the entire status object for reference
+            appState.stats.botStatus = message;
+            
             return;
           }
           
@@ -294,6 +298,9 @@ function connectToWebSocket() {
               appState.stats.botChannels = message.data.channels || [];
               appState.stats.botMemoryUsage = message.data.memory || {};
               appState.stats.botUptime = message.data.uptime || 0;
+              
+              // Store the entire status object for reference
+              appState.stats.botStatus = message.data;
               
               // Store commands if available
               if (message.data.commands) {
@@ -467,7 +474,8 @@ app.get('/api/stats', (req, res) => {
       uptime: appState.stats.botUptime,
       uptimeFormatted: botUptimeFormatted,
       memoryUsage: appState.stats.botMemoryUsage,
-      lastStatusUpdate: appState.stats.lastStatusUpdate
+      lastStatusUpdate: appState.stats.lastStatusUpdate,
+      pid: appState.stats.botStatus && appState.stats.botStatus.processId
     },
     controlPanel: {
       startTime: appState.stats.startTime,
@@ -963,6 +971,7 @@ app.get('/', (req, res) => {
         <div class="tab active" data-tab="dashboard">Dashboard</div>
         <div class="tab" data-tab="chat">Chat</div>
         <div class="tab" data-tab="logs">Logs</div>
+        <div class="tab" data-tab="admin">Admin</div>
       </div>
       
       <div class="tab-content active" id="dashboard-tab">
@@ -1076,6 +1085,75 @@ app.get('/', (req, res) => {
               <button id="exit-button" class="danger">Exit</button>
             </div>
           </div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="admin-tab">
+        <div class="admin-panel">
+          <div class="panel">
+            <div class="panel-header">Bot Administration</div>
+            <div class="admin-content">
+              <div class="admin-section">
+                <h3>Bot Status</h3>
+                <div class="status-display">
+                  <div class="status-item">
+                    <span class="status-label">Current Status:</span>
+                    <span id="admin-bot-status" class="status-value">Unknown</span>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">Uptime:</span>
+                    <span id="admin-bot-uptime" class="status-value">-</span>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">Process ID:</span>
+                    <span id="admin-bot-pid" class="status-value">-</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="admin-section">
+                <h3>Bot Control</h3>
+                <div class="admin-controls">
+                  <button id="restart-bot" class="admin-button warning">
+                    <span class="button-icon">🔄</span> Restart Bot
+                  </button>
+                  <button id="shutdown-bot" class="admin-button danger">
+                    <span class="button-icon">⏹️</span> Shutdown Bot
+                  </button>
+                  <button id="start-bot" class="admin-button success">
+                    <span class="button-icon">▶️</span> Start Bot
+                  </button>
+                </div>
+                <div class="admin-note">
+                  <p><strong>Note:</strong> Restarting or shutting down the bot will disconnect it from Twitch chat temporarily.</p>
+                </div>
+              </div>
+              
+              <div class="admin-section">
+                <h3>Connection History</h3>
+                <div id="admin-connection-history" class="admin-history">
+                  <!-- Connection history will be populated here -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Confirm Action</h3>
+          <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+          <p id="modal-message">Are you sure you want to perform this action?</p>
+        </div>
+        <div class="modal-footer">
+          <button id="modal-cancel" class="modal-button">Cancel</button>
+          <button id="modal-confirm" class="modal-button danger">Confirm</button>
         </div>
       </div>
     </div>
@@ -1450,12 +1528,311 @@ app.get('/', (req, res) => {
       setInterval(updateChat, 2000);
       setInterval(updateCommands, 10000);
       setInterval(updateStats, 5000);
+      
+      // Admin Panel Functionality
+      const restartBotButton = document.getElementById('restart-bot');
+      const shutdownBotButton = document.getElementById('shutdown-bot');
+      const startBotButton = document.getElementById('start-bot');
+      const adminBotStatus = document.getElementById('admin-bot-status');
+      const adminBotUptime = document.getElementById('admin-bot-uptime');
+      const adminBotPid = document.getElementById('admin-bot-pid');
+      const adminConnectionHistory = document.getElementById('admin-connection-history');
+      
+      // Modal elements
+      const confirmationModal = document.getElementById('confirmation-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalMessage = document.getElementById('modal-message');
+      const modalCancel = document.getElementById('modal-cancel');
+      const modalConfirm = document.getElementById('modal-confirm');
+      const closeModal = document.querySelector('.close-modal');
+      
+      // Show modal with custom message
+      function showConfirmationModal(title, message, confirmAction) {
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        
+        // Set up confirm action
+        modalConfirm.onclick = () => {
+          confirmAction();
+          confirmationModal.style.display = 'none';
+        };
+        
+        // Show the modal
+        confirmationModal.style.display = 'block';
+      }
+      
+      // Close modal when clicking cancel or X
+      modalCancel.onclick = () => {
+        confirmationModal.style.display = 'none';
+      };
+      
+      closeModal.onclick = () => {
+        confirmationModal.style.display = 'none';
+      };
+      
+      // Close modal when clicking outside
+      window.onclick = (event) => {
+        if (event.target === confirmationModal) {
+          confirmationModal.style.display = 'none';
+        }
+      };
+      
+      // Update admin panel status
+      function updateAdminPanel() {
+        fetch('/api/stats')
+          .then(response => response.json())
+          .then(stats => {
+            // Update bot status
+            if (stats.connection && stats.connection.status) {
+              adminBotStatus.textContent = stats.connection.status;
+              
+              // Set status color
+              adminBotStatus.className = 'status-value';
+              if (stats.connection.status === 'Connected') {
+                adminBotStatus.classList.add('status-connected');
+              } else if (stats.connection.status === 'Error') {
+                adminBotStatus.classList.add('status-error');
+              } else {
+                adminBotStatus.classList.add('status-disconnected');
+              }
+            } else {
+              adminBotStatus.textContent = 'Unknown';
+              adminBotStatus.className = 'status-value';
+            }
+            
+            // Update uptime
+            if (stats.bot && stats.bot.uptimeFormatted) {
+              adminBotUptime.textContent = stats.bot.uptimeFormatted;
+            } else {
+              adminBotUptime.textContent = '-';
+            }
+            
+            // Update PID
+            if (stats.bot && stats.bot.pid) {
+              adminBotPid.textContent = stats.bot.pid;
+            } else {
+              adminBotPid.textContent = '-';
+            }
+            
+            // Update connection history
+            if (stats.controlPanel && stats.controlPanel.connectionHistory) {
+              adminConnectionHistory.innerHTML = '';
+              
+              stats.controlPanel.connectionHistory.forEach(entry => {
+                const historyEntry = document.createElement('div');
+                historyEntry.className = 'history-entry';
+                
+                const time = new Date(entry.time).toLocaleTimeString();
+                historyEntry.innerHTML = \`
+                  <span class="history-time">\${time}</span>
+                  <span class="history-event">\${entry.state}</span>
+                  \${entry.reason ? \`<span class="history-reason">(\${entry.reason})</span>\` : ''}
+                \`;
+                
+                adminConnectionHistory.appendChild(historyEntry);
+              });
+            }
+            
+            // Enable/disable buttons based on status
+            if (stats.connection && stats.connection.status === 'Connected') {
+              startBotButton.disabled = true;
+              restartBotButton.disabled = false;
+              shutdownBotButton.disabled = false;
+            } else {
+              startBotButton.disabled = false;
+              restartBotButton.disabled = true;
+              shutdownBotButton.disabled = true;
+            }
+          })
+          .catch(error => {
+            console.error('Error updating admin panel:', error);
+          });
+      }
+      
+      // Restart bot
+      restartBotButton.addEventListener('click', () => {
+        showConfirmationModal(
+          'Restart Bot',
+          'Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.',
+          () => {
+            fetch('/api/admin/restart', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  addLog('Bot restart initiated');
+                } else {
+                  addLog('Error restarting bot: ' + data.error);
+                }
+              })
+              .catch(error => {
+                console.error('Error restarting bot:', error);
+                addLog('Error restarting bot: ' + error.message);
+              });
+          }
+        );
+      });
+      
+      // Shutdown bot
+      shutdownBotButton.addEventListener('click', () => {
+        showConfirmationModal(
+          'Shutdown Bot',
+          'Are you sure you want to shut down the bot? You will need to manually restart it.',
+          () => {
+            fetch('/api/admin/shutdown', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  addLog('Bot shutdown initiated');
+                } else {
+                  addLog('Error shutting down bot: ' + data.error);
+                }
+              })
+              .catch(error => {
+                console.error('Error shutting down bot:', error);
+                addLog('Error shutting down bot: ' + error.message);
+              });
+          }
+        );
+      });
+      
+      // Start bot
+      startBotButton.addEventListener('click', () => {
+        showConfirmationModal(
+          'Start Bot',
+          'Are you sure you want to start the bot?',
+          () => {
+            fetch('/api/admin/start', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  addLog('Bot start initiated');
+                } else {
+                  addLog('Error starting bot: ' + data.error);
+                }
+              })
+              .catch(error => {
+                console.error('Error starting bot:', error);
+                addLog('Error starting bot: ' + error.message);
+              });
+          }
+        );
+      });
+      
+      // Add admin panel update to polling
+      setInterval(updateAdminPanel, 5000);
+      
+      // Initial admin panel update
+      updateAdminPanel();
     </script>
   </body>
   </html>
   `;
   
   res.send(html);
+});
+
+// Add these API endpoints for admin actions
+app.post('/api/admin/restart', (req, res) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    const restartMsg = {
+      type: 'RESTART_BOT',
+      client_id: clientId,
+      timestamp: Date.now()
+    };
+    
+    ws.send(JSON.stringify(restartMsg));
+    addLog('Sent restart command to bot');
+    
+    // Track the restart in connection history
+    trackConnectionState('Restart Requested', 'User initiated restart');
+    
+    res.json({ success: true, message: 'Restart command sent' });
+  } catch (error) {
+    addLog(`Error sending restart command: ${error.message}`);
+    appState.stats.errors++;
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/shutdown', (req, res) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    const shutdownMsg = {
+      type: 'EXIT_BOT',
+      client_id: clientId,
+      timestamp: Date.now()
+    };
+    
+    ws.send(JSON.stringify(shutdownMsg));
+    addLog('Sent shutdown command to bot');
+    
+    // Track the shutdown in connection history
+    trackConnectionState('Shutdown Requested', 'User initiated shutdown');
+    
+    res.json({ success: true, message: 'Shutdown command sent' });
+  } catch (error) {
+    addLog(`Error sending shutdown command: ${error.message}`);
+    appState.stats.errors++;
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/start', (req, res) => {
+  try {
+    // This is a placeholder - actual implementation would depend on how you want to start the bot
+    // For example, you might use child_process.spawn to start a new bot process
+    
+    const { spawn } = require('child_process');
+    const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
+    
+    // Check if the bot file exists
+    if (!fs.existsSync(botPath)) {
+      return res.status(404).json({ error: 'Bot file not found: ' + botPath });
+    }
+    
+    // Spawn the bot process
+    const botProcess = spawn('node', [botPath], {
+      detached: true,
+      stdio: 'ignore',
+      env: process.env
+    });
+    
+    // Unref the child process so it can run independently
+    botProcess.unref();
+    
+    addLog(`Started bot process with PID: ${botProcess.pid}`);
+    
+    // Track the start in connection history
+    trackConnectionState('Start Requested', 'User initiated start');
+    
+    res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
+  } catch (error) {
+    addLog(`Error starting bot: ${error.message}`);
+    appState.stats.errors++;
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Start the server
