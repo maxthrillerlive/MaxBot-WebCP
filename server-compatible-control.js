@@ -1163,72 +1163,36 @@ app.get('/', (req, res) => {
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
+              // Create a single line for the entire chat message
               const chatLine = document.createElement('div');
               chatLine.className = 'chat-line';
+              chatLine.style.fontSize = '18px'; // Directly set larger font size
+              chatLine.style.lineHeight = '1.4';
+              chatLine.style.display = 'flex';
+              chatLine.style.flexWrap = 'wrap';
+              chatLine.style.alignItems = 'center';
               
               // Add timestamp at the beginning
               const timeSpan = document.createElement('span');
-              timeSpan.className = 'chat-time';
+              timeSpan.style.color = '#888';
+              timeSpan.style.marginRight = '8px';
+              timeSpan.style.fontSize = '16px';
               timeSpan.textContent = \`[${new Date(msg.time).toLocaleTimeString()}]\`;
               chatLine.appendChild(timeSpan);
               
-              // Create badges container
-              const badgesContainer = document.createElement('div');
-              badgesContainer.className = 'chat-badges';
-              
-              // Add badges based on username and badges object
-              if (msg.username.toLowerCase() === 'maxthriller') {
-                // Broadcaster badge
-                const broadcasterBadge = document.createElement('div');
-                broadcasterBadge.className = 'chat-badge badge-broadcaster';
-                broadcasterBadge.title = 'Broadcaster';
-                badgesContainer.appendChild(broadcasterBadge);
-              }
-              
-              if (msg.username.toLowerCase() === 'max2d2') {
-                // Bot badge
-                const botBadge = document.createElement('div');
-                botBadge.className = 'chat-badge badge-bot';
-                botBadge.title = 'Bot';
-                badgesContainer.appendChild(botBadge);
-              }
-              
-              // Add badges from the badges object if it exists
-              if (msg.badges) {
-                if (msg.badges.moderator) {
-                  const modBadge = document.createElement('div');
-                  modBadge.className = 'chat-badge badge-moderator';
-                  modBadge.title = 'Moderator';
-                  badgesContainer.appendChild(modBadge);
-                }
-                
-                if (msg.badges.vip) {
-                  const vipBadge = document.createElement('div');
-                  vipBadge.className = 'chat-badge badge-vip';
-                  vipBadge.title = 'VIP';
-                  badgesContainer.appendChild(vipBadge);
-                }
-                
-                if (msg.badges.subscriber) {
-                  const subBadge = document.createElement('div');
-                  subBadge.className = 'chat-badge badge-subscriber';
-                  subBadge.title = 'Subscriber';
-                  badgesContainer.appendChild(subBadge);
-                }
-              }
-              
-              // Add badges to line
-              chatLine.appendChild(badgesContainer);
-              
-              // Add username
+              // Add username with bold styling
               const usernameSpan = document.createElement('span');
-              usernameSpan.className = 'chat-username';
+              usernameSpan.style.fontWeight = 'bold';
+              usernameSpan.style.color = '#4CAF50';
+              usernameSpan.style.marginRight = '8px';
+              usernameSpan.style.fontSize = '18px';
               usernameSpan.textContent = msg.username;
               chatLine.appendChild(usernameSpan);
               
               // Add message on the same line
               const messageSpan = document.createElement('span');
-              messageSpan.className = 'chat-message';
+              messageSpan.style.fontSize = '18px';
+              messageSpan.style.wordBreak = 'break-word';
               messageSpan.textContent = msg.message;
               chatLine.appendChild(messageSpan);
               
