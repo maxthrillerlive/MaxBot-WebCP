@@ -106,14 +106,40 @@ class BotClient extends EventEmitter {
 
             this.ws.on('message', (data) => {
                 try {
-                    console.log('Received message from server:', data.toString().substring(0, 100) + '...');
-                    const message = JSON.parse(data);
+                    const rawMessage = data.toString();
+                    console.log('Received raw message from server:', rawMessage.substring(0, 100) + (rawMessage.length > 100 ? '...' : ''));
                     
-                    console.log('Message type:', message.type);
+                    // Try to parse the message
+                    let message;
+                    try {
+                        message = JSON.parse(rawMessage);
+                    } catch (parseError) {
+                        console.error('Error parsing message:', parseError);
+                        this.safeLog(`{red-fg}Error parsing message from server: ${parseError.message}{/red-fg}`);
+                        return;
+                    }
+                    
+                    // Check if this is an error message
+                    if (message.type === 'ERROR') {
+                        console.log('Received error message:', message.error);
+                        this.safeLog(`{red-fg}Server error: ${message.error}{/red-fg}`);
+                        return;
+                    }
                     
                     // Handle different message types
-                    if (message.type === 'status') {
-                        this.handleStatusUpdate(message.data);
+                    if (message.type === 'status' || message.type === 'STATUS') {
+                        // The server might be sending status updates directly
+                        this.handleStatusUpdate(message.data || message);
+                    } else if (message.connectionStatus !== undefined) {
+                        // The server might be sending status in a different format
+                        // This looks like it might be the actual format based on the console output
+                        const status = {
+                            connected: message.connectionStatus === 'connected',
+                            channel: message.channel || 'Unknown',
+                            uptime: message.uptime || 0,
+                            commands: message.commands || []
+                        };
+                        this.handleStatusUpdate(status);
                     } else if (message.type === 'console') {
                         this.safeLog(message.data.message);
                     } else if (message.type === 'command-update') {
@@ -150,7 +176,27 @@ class BotClient extends EventEmitter {
                         this.safeLog(formattedMessage);
                         this.emit('log', message.data);
                     } else {
-                        console.log('Unknown message type:', message.type);
+                        // If we don't recognize the message type, try to extract useful information
+                        console.log('Unrecognized message format:', message);
+                        
+                        // Check if there's any status-like information we can use
+                        if (message.available !== undefined) {
+                            // This might be a command list
+                            this.safeLog(`{cyan-fg}Received command list with ${message.available} commands{/cyan-fg}`);
+                            if (message.commands && Array.isArray(message.commands)) {
+                                this.ui.updateCommands(message.commands);
+                            }
+                        }
+                        
+                        // Check if there's any channel information
+                        if (message.channels !== undefined) {
+                            this.safeLog(`{cyan-fg}Bot is in channels: ${JSON.stringify(message.channels)}{/cyan-fg}`);
+                        }
+                        
+                        // Check if there's a processId (might indicate the bot is running)
+                        if (message.processId !== undefined) {
+                            this.safeLog(`{cyan-fg}Bot process ID: ${message.processId}{/cyan-fg}`);
+                        }
                     }
                     
                     // Render the screen if UI is available
@@ -292,10 +338,14 @@ class BotClient extends EventEmitter {
         if (this.isConnected) {
             console.log('Requesting status update from server');
             try {
+                // Try different message formats that the server might expect
+                
+                // Option 1: Simple 'status' request
                 this.ws.send(JSON.stringify({
-                    type: 'get-status',
-                    data: {}
+                    type: 'status'
                 }));
+                
+                // If that doesn't work, we can try other formats in the future
             } catch (error) {
                 console.error('Error requesting status:', error);
             }
@@ -465,23 +515,72 @@ class BotClient extends EventEmitter {
 
     handleStatusUpdate(status) {
         console.log('Received status update:', JSON.stringify(status));
-        this.botStatus = status;
+        
+        // Try to extract status information from whatever format we received
+        const updatedStatus = {
+            connected: status.connected || status.connectionStatus === 'connected' || false,
+            channel: status.channel || (status.channels && status.channels.length > 0 ? status.channels[0] : 'Unknown'),
+            uptime: status.uptime || 0,
+            commands: status.commands || []
+        };
+        
+        this.botStatus = updatedStatus;
         
         // Update the UI if available
         if (this.ui && typeof this.ui.updateStatus === 'function') {
             console.log('Updating UI status display');
-            this.ui.updateStatus(status);
+            this.ui.updateStatus(updatedStatus);
         } else {
-            console.log('Status update received but UI not ready:', JSON.stringify(status));
+            console.log('Status update received but UI not ready:', JSON.stringify(updatedStatus));
         }
         
         // Update commands if available
-        if (status.commands && this.ui && typeof this.ui.updateCommands === 'function') {
-            console.log('Updating UI commands list with', status.commands.length, 'commands');
-            this.ui.updateCommands(status.commands);
-        } else if (!status.commands) {
+        if (updatedStatus.commands && updatedStatus.commands.length > 0 && this.ui && typeof this.ui.updateCommands === 'function') {
+            console.log('Updating UI commands list with', updatedStatus.commands.length, 'commands');
+            this.ui.updateCommands(updatedStatus.commands);
+        } else if (!updatedStatus.commands || updatedStatus.commands.length === 0) {
             console.log('No commands in status update');
         }
+    }
+
+    // Add this helper method to extract status information from various message formats
+    extractStatusInfo(message) {
+        // Try to extract status information from whatever format we received
+        const status = {
+            connected: false,
+            channel: 'Unknown',
+            uptime: 0,
+            commands: []
+        };
+        
+        // Check for direct status properties
+        if (message.connected !== undefined) {
+            status.connected = message.connected;
+        } else if (message.connectionStatus !== undefined) {
+            status.connected = message.connectionStatus === 'connected';
+        }
+        
+        // Check for channel information
+        if (message.channel) {
+            status.channel = message.channel;
+        } else if (message.channels && Array.isArray(message.channels) && message.channels.length > 0) {
+            status.channel = message.channels[0];
+        }
+        
+        // Check for uptime
+        if (message.uptime !== undefined) {
+            status.uptime = message.uptime;
+        }
+        
+        // Check for commands
+        if (message.commands && Array.isArray(message.commands)) {
+            status.commands = message.commands;
+        } else if (message.available !== undefined && message.commands) {
+            // This might be a different format for commands
+            status.commands = message.commands;
+        }
+        
+        return status;
     }
 }
 
