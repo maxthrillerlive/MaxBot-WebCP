@@ -70,14 +70,21 @@ class BotClient extends EventEmitter {
                 this.connectionState = 'connected';
                 this.reconnectAttempts = 0;
                 this.reconnectDelay = 1000;
-                this.requestStatus();
-                this.safeLog('{green-fg}Connected to bot server{/green-fg}');
                 
-                // If we were in the middle of a restart, clear that state
-                if (this.restartInProgress) {
-                    this.restartInProgress = false;
-                    this.safeLog('{green-fg}Bot restart completed successfully{/green-fg}');
+                // Set a default status immediately upon connection
+                this.botStatus = {
+                    connected: true,
+                    channel: 'Connecting...',
+                    uptime: 0
+                };
+                
+                // Update the UI with the default status
+                if (this.ui && typeof this.ui.updateStatus === 'function') {
+                    console.log('Setting initial status after connection');
+                    this.ui.updateStatus(this.botStatus);
                 }
+                
+                this.safeLog('{green-fg}Connected to bot server{/green-fg}');
                 
                 // Force a render to ensure UI is displayed
                 if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
@@ -102,6 +109,11 @@ class BotClient extends EventEmitter {
                         this.handleStatusUpdate(defaultStatus);
                     }
                 }, 3000);
+
+                // Force a status update after a short delay
+                setTimeout(() => {
+                    this.forceStatusUpdate();
+                }, 1000);
             });
 
             this.ws.on('message', (data) => {
@@ -588,6 +600,25 @@ class BotClient extends EventEmitter {
         }
         
         return status;
+    }
+
+    forceStatusUpdate() {
+        console.log('Forcing status update');
+        
+        // Create a status object with current information
+        const status = {
+            connected: this.isConnected,
+            channel: this.botStatus.channel || 'Unknown',
+            uptime: this.botStatus.uptime || 0
+        };
+        
+        // Update the UI
+        if (this.ui && typeof this.ui.updateStatus === 'function') {
+            console.log('Forcing UI status update with:', JSON.stringify(status));
+            this.ui.updateStatus(status);
+        } else {
+            console.log('Cannot force status update: UI not available');
+        }
     }
 }
 

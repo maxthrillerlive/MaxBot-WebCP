@@ -89,6 +89,21 @@ class BotUI {
                 }
             });
             
+            // Test the status panel directly
+            setTimeout(() => {
+                console.log('Testing status panel directly from UI');
+                if (this.statusPanel) {
+                    this.statusPanel.updateStatus({
+                        connected: true,
+                        channel: 'Test Channel',
+                        uptime: 123
+                    });
+                    this.screen.render();
+                } else {
+                    console.log('Status panel not available for test');
+                }
+            }, 3000);
+            
             // Mark as initialized
             this.initialized = true;
             

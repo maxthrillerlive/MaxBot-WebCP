@@ -3,6 +3,7 @@ const blessed = require('blessed');
 
 class StatusPanel {
   constructor(grid, row, col, rowSpan, colSpan) {
+    console.log('Creating StatusPanel');
     this.panel = grid.set(row, col, rowSpan, colSpan, blessed.box, {
       label: ' Bot Status ',
       tags: true,
@@ -18,6 +19,16 @@ class StatusPanel {
         }
       }
     });
+    
+    // Set a test message to verify the panel is working
+    setTimeout(() => {
+      console.log('Setting test message in status panel');
+      this.panel.setContent('{bold}TEST:{/bold} Status panel is working');
+      // Force a render
+      if (this.panel.screen) {
+        this.panel.screen.render();
+      }
+    }, 2000);
   }
 
   updateStatus(status) {
