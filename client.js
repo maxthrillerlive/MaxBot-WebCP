@@ -43,9 +43,15 @@ class BotClient extends EventEmitter {
         }
         
         // Set a timeout to connect to the server
-        // This helps avoid freezing during initialization
         setTimeout(() => {
-            this.connectToServer();
+            try {
+                this.connectToServer();
+            } catch (error) {
+                console.error('Error connecting to server:', error);
+                if (this.ui && this.ui.isInitialized()) {
+                    this.ui.logToConsole(`Error connecting to server: ${error.message}`);
+                }
+            }
         }, 1000);
     }
 
@@ -61,105 +67,31 @@ class BotClient extends EventEmitter {
     }
 
     connectToServer() {
-        // Get server URL from environment variables or use default
-        const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
-        const port = process.env.WEBSOCKET_PORT || '8080';
-        const serverUrl = `ws://${host}:${port}`;
-        
-        console.log(`Connecting to WebSocket server at: ${serverUrl}`);
-        
-        // Set a connection timeout
-        const connectionTimeout = setTimeout(() => {
-            console.log('WebSocket connection timeout after 5 seconds');
-            if (this.ws) {
-                try {
-                    this.ws.close();
-                } catch (e) {
-                    // Ignore errors
-                }
-                this.ws = null;
-            }
-            
-            // Update UI if available
-            if (this.ui && this.ui.isInitialized()) {
-                this.ui.logToConsole('Failed to connect to MaxBot server (timeout)');
-                this.ui.updateStatus({ connected: false });
-            }
-        }, 5000);
-        
         try {
-            // Create WebSocket with timeout option
-            const options = {
-                handshakeTimeout: 5000, // 5 seconds
-                timeout: 5000
-            };
+            // Get server URL from environment variables or use default
+            const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
+            const port = process.env.WEBSOCKET_PORT || '8080';
+            const serverUrl = `ws://${host}:${port}`;
             
-            this.ws = new WebSocket(serverUrl, options);
-            console.log('Connection initiated');
-            
-            // Set up minimal event handlers
-        this.ws.on('open', () => {
-                console.log('Connected to WebSocket server');
-                clearTimeout(connectionTimeout);
-                
-                // Update UI if available
-                if (this.ui && this.ui.isInitialized()) {
-                    this.ui.logToConsole('Connected to MaxBot server');
-                    this.ui.updateStatus({ connected: true, channel: 'Unknown', uptime: '0s' });
-                }
-            });
-            
-            this.ws.on('error', (error) => {
-                console.error('WebSocket error:', error.message);
-                clearTimeout(connectionTimeout);
-                
-                // Update UI if available
-                if (this.ui && this.ui.isInitialized()) {
-                    this.ui.logToConsole(`WebSocket error: ${error.message}`);
-                    this.ui.updateStatus({ connected: false });
-            }
-        });
-
-        this.ws.on('close', () => {
-                console.log('Disconnected from WebSocket server');
-                clearTimeout(connectionTimeout);
-                
-                // Update UI if available
-                if (this.ui && this.ui.isInitialized()) {
-                    this.ui.updateStatus({ connected: false });
-                    this.ui.logToConsole('Disconnected from MaxBot server');
-                }
-            });
-            
-            // Minimal message handling
-            this.ws.on('message', (data) => {
-                try {
-                    console.log('Received message from server');
-                    
-                    // Try to parse the message but don't do anything with it
-                    // This avoids potential freezing issues
-                    const message = JSON.parse(data);
-                    
-                    // Just log the message type
-                    console.log('Message type:', message.type);
-                    
-                    // Update UI if available
-                    if (this.ui && this.ui.isInitialized()) {
-                        this.ui.logToConsole(`Received message of type: ${message.type}`);
-                    }
-                } catch (error) {
-                    console.error('Error processing message:', error);
-                }
-            });
-            
-        } catch (error) {
-            console.error('Error creating WebSocket connection:', error);
-            clearTimeout(connectionTimeout);
+            console.log(`Connecting to WebSocket server at: ${serverUrl}`);
             
             // Update UI if available
             if (this.ui && this.ui.isInitialized()) {
-                this.ui.logToConsole(`Error creating WebSocket connection: ${error.message}`);
+                this.ui.logToConsole(`Connecting to WebSocket server at: ${serverUrl}`);
             }
+            
+            // Do not actually connect to avoid freezing
+            console.log('WebSocket connection disabled in safe mode');
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('WebSocket connection disabled in safe mode');
+                this.ui.updateStatus({ 
+                    connected: false, 
+                    channel: 'N/A (Safe Mode)', 
+                    uptime: 'N/A' 
+                });
+            }
+        } catch (error) {
+            console.error('Error in connectToServer:', error);
         }
     }
     
@@ -188,28 +120,23 @@ class BotClient extends EventEmitter {
     }
     
     sendMessage(message) {
-        console.log('Sending message:', message);
-        // Do nothing to avoid potential freezing
+        console.log('Send message disabled in safe mode');
     }
     
     enableCommand(commandName) {
-        console.log('Enable command:', commandName);
-        // Do nothing to avoid potential freezing
+        console.log('Enable command disabled in safe mode');
     }
     
     disableCommand(commandName) {
-        console.log('Disable command:', commandName);
-        // Do nothing to avoid potential freezing
+        console.log('Disable command disabled in safe mode');
     }
     
     restartBot() {
-        console.log('Restart bot');
-        // Do nothing to avoid potential freezing
+        console.log('Restart bot disabled in safe mode');
     }
     
     exitBot() {
-        console.log('Exit bot');
-        // Do nothing to avoid potential freezing
+        console.log('Exit bot disabled in safe mode');
     }
 
     handleMessage(message) {

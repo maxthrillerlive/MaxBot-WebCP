@@ -60,8 +60,11 @@ try {
     // Set up the screen
     ui.setupScreen();
     
-    // Create the client but don't set up event handlers
-    const client = new BotClient(ui);
+    // Create a global variable for the client
+    global.client = null;
+    
+    // Create the client
+    global.client = new BotClient(ui);
     console.log('Client created with UI');
     
     // Skip setting up event handlers
@@ -140,4 +143,10 @@ function setupConsoleOverride(client) {
 }
 
 // Start the client with console override
-const originalConsole = setupConsoleOverride(client);
+const originalConsole = setupConsoleOverride(global.client);
+
+// Export the UI and client for debugging
+module.exports = {
+    ui,
+    client: global.client
+};
