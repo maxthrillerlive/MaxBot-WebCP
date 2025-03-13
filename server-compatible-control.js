@@ -80,9 +80,6 @@ function connectToWebSocket() {
       }
     });
     
-    // Set up ping interval
-    let pingInterval = null;
-    
     // Set up connection timeout
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
@@ -101,20 +98,19 @@ function connectToWebSocket() {
       appState.wsStatus = 'Connected';
       appState.reconnectAttempts = 0;
       
-      // Register with the server - AVOID requesting status initially
+      // Instead of sending a 'register' message, send a 'GET_STATUS' message
+      // which the server recognizes
       try {
-        const registerMessage = {
-          type: 'register',
+        const statusRequest = {
+          type: 'GET_STATUS',  // Use 'GET_STATUS' instead of 'register'
           client_id: clientId,
-          client_type: 'tui',
-          timestamp: Date.now(),
-          version: '1.0.0'
+          timestamp: Date.now()
         };
         
-        ws.send(JSON.stringify(registerMessage));
-        addLog('Sent registration message');
+        ws.send(JSON.stringify(statusRequest));
+        addLog('Sent status request');
       } catch (e) {
-        addLog(`Error sending registration: ${e.message}`);
+        addLog(`Error sending status request: ${e.message}`);
       }
       
       // Set up a ping interval to keep the connection alive
@@ -123,7 +119,7 @@ function connectToWebSocket() {
           try {
             // Send a ping message
             const pingMessage = {
-              type: 'ping',
+              type: 'ping',  // This seems to be recognized by the server
               client_id: clientId,
               timestamp: Date.now()
             };
@@ -153,9 +149,6 @@ function connectToWebSocket() {
           clearInterval(pingInterval);
         }
       }, 10000); // Send a ping every 10 seconds
-      
-      // DO NOT request initial status since it causes an error
-      // Instead, we'll provide a button to request status manually
     });
     
     ws.on('error', (error) => {
@@ -192,7 +185,7 @@ function connectToWebSocket() {
     ws.on('message', (data) => {
       try {
         // Log the raw data for debugging
-        console.log('Received raw data:', data.toString());
+        addLog(`Received raw data: ${data.toString()}`);
         
         const message = JSON.parse(data);
         
@@ -203,13 +196,7 @@ function connectToWebSocket() {
             // Try to determine if this is a status message
             if (message.connectionState && message.username && message.commands) {
                 addLog('This appears to be a status message, handling as STATUS type');
-                
-                // Handle as a status message
                 appState.wsMessages++;
-                
-                // Process status update
-                // You can add code here to update your UI with the status information
-                
                 return;
             }
             
@@ -227,11 +214,18 @@ function connectToWebSocket() {
                 
             case 'STATUS':
                 addLog(`Received status update`);
-                // Process status update
                 break;
                 
-            case 'register_ack':
-                addLog(`Registration acknowledged by server`);
+            case 'COMMANDS':
+                addLog(`Received commands list`);
+                break;
+                
+            case 'CHAT_MESSAGE':
+                addLog(`Received chat message from ${message.data?.username || 'unknown'}`);
+                break;
+                
+            case 'CONNECTION_STATE':
+                addLog(`Received connection state: ${message.state || 'unknown'}`);
                 break;
                 
             case 'ERROR':
