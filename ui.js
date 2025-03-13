@@ -112,7 +112,27 @@ class BotUI {
 
     // Minimal implementation of required methods
     setClient() {}
-    logToConsole(message) { console.log(message); }
+    logToConsole(message) {
+        // Use process.stdout.write directly instead of console.log
+        // to avoid potential recursion
+        try {
+            let cleanMessage = message;
+            if (typeof message === 'string') {
+                // Remove blessed tags with a simple approach
+                cleanMessage = message.replace(/\{[^}]*\}/g, '');
+            } else if (typeof message === 'object') {
+                // Convert objects to strings safely
+                try {
+                    cleanMessage = JSON.stringify(message);
+                } catch (e) {
+                    cleanMessage = '[Object cannot be stringified]';
+                }
+            }
+            process.stdout.write('LOG: ' + cleanMessage + '\n');
+        } catch (error) {
+            process.stderr.write('Error in logToConsole: ' + error.message + '\n');
+        }
+    }
     showConfirmDialog() { return Promise.resolve(true); }
     updateStatus() {}
     updateCommands() {}
