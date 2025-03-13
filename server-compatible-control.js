@@ -1,39 +1,14 @@
 #!/usr/bin/env node
 
+const express = require('express');
 const http = require('http');
+const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
-const WebSocket = require('ws');
-const os = require('os');
+const { v4: uuidv4 } = require('uuid');
 
-// Create a PID file
-const pidFile = path.join(__dirname, 'maxbot-tui.pid');
-fs.writeFileSync(pidFile, process.pid.toString());
-console.log(`PID file created at ${pidFile}`);
-
-// Helper function to safely create timestamps
-function safeTimestamp() {
-  try {
-    return Date.now();
-  } catch (e) {
-    addLog(`Error creating timestamp: ${e.message}`);
-    return 0;
-  }
-}
-
-// Helper function to safely create ISO date strings
-function safeISOString(timestamp) {
-  try {
-    // Ensure timestamp is a valid number
-    if (typeof timestamp !== 'number' || isNaN(timestamp) || !isFinite(timestamp)) {
-      return new Date().toISOString(); // Use current time as fallback
-    }
-    return new Date(timestamp).toISOString();
-  } catch (e) {
-    addLog(`Error creating ISO string: ${e.message}`);
-    return new Date().toISOString(); // Use current time as fallback
-  }
-}
+// Generate a unique client ID
+const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
 
 // Initialize application state
 const appState = {
@@ -41,23 +16,45 @@ const appState = {
   wsStatus: 'Disconnected',
   wsMessages: 0,
   reconnectAttempts: 0,
-  lastPingTime: safeTimestamp(),
-  lastStatusTime: safeTimestamp(),
+  lastPingTime: 0,
+  lastStatusTime: 0,
   serverErrors: [],
-  logs: []
+  logs: [],
+  chatMessages: [], // Add chat messages array
+  commands: [] // Add commands array
 };
 
-// Add log with safe timestamp
+// Create a PID file
+const pidFile = path.join(__dirname, 'maxbot-tui-control.pid');
+fs.writeFileSync(pidFile, process.pid.toString());
+console.log(`PID file created at ${pidFile}`);
+
+// Set up safety timeout
+console.log('Setting up safety timeout (1 hour)');
+const safetyTimeout = setTimeout(() => {
+  console.log('Safety timeout reached, forcing exit');
+  cleanup();
+  process.exit(0);
+}, 3600000); // 1 hour
+
+// Create Express app
+const app = express();
+const server = http.createServer(app);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// Add log function
 function addLog(message) {
-  const timestamp = safeTimestamp();
+  const timestamp = new Date().toISOString();
   const logEntry = {
     time: timestamp,
-    timeString: safeISOString(timestamp),
     message: message
   };
   
   appState.logs.push(logEntry);
-  console.log(`[${logEntry.timeString}] ${message}`);
+  console.log(`[${timestamp}] ${message}`);
   
   // Keep logs to a reasonable size
   if (appState.logs.length > 1000) {
@@ -65,33 +62,29 @@ function addLog(message) {
   }
 }
 
-// Clean up on exit
-process.on('exit', () => {
-  try {
-    if (fs.existsSync(pidFile)) {
-      fs.unlinkSync(pidFile);
-      console.log('PID file removed');
-    }
-  } catch (e) {
-    // Ignore errors
+// Add chat message function
+function addChatMessage(username, message, channel, badges = {}) {
+  const timestamp = new Date().toISOString();
+  const chatEntry = {
+    time: timestamp,
+    username,
+    message,
+    channel,
+    badges
+  };
+  
+  appState.chatMessages.push(chatEntry);
+  
+  // Keep chat messages to a reasonable size
+  if (appState.chatMessages.length > 100) {
+    appState.chatMessages.shift();
   }
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  addLog(`Uncaught exception: ${err.message}`);
-  addLog(err.stack);
-});
-
-// Handle unhandled rejections
-process.on('unhandledRejection', (reason, promise) => {
-  addLog(`Unhandled rejection at: ${promise}, reason: ${reason}`);
-});
-
-// Generate a client ID
-const clientId = `MaxBot-TUI-HTTP-${os.hostname()}-${process.pid}`;
+}
 
 // Connect to WebSocket server
+let ws = null;
+let pingInterval = null;
+
 function connectToWebSocket() {
   try {
     // Get server URL from environment variables or use default
@@ -102,11 +95,8 @@ function connectToWebSocket() {
     addLog(`Connecting to WebSocket server at: ${serverUrl}`);
     appState.reconnectAttempts++;
     
-    const ws = new WebSocket(serverUrl, {
-      handshakeTimeout: 5000, // 5 seconds
-      headers: {
-        'User-Agent': clientId
-      }
+    ws = new WebSocket(serverUrl, {
+      handshakeTimeout: 5000 // 5 seconds
     });
     
     // Set up connection timeout
@@ -127,60 +117,46 @@ function connectToWebSocket() {
       appState.wsStatus = 'Connected';
       appState.reconnectAttempts = 0;
       
-      // Wait a short time before sending the first message
-      setTimeout(() => {
+      // Send registration message
         try {
-          // Send a status request
-          const statusRequest = {
-            type: 'GET_STATUS',
+        const registerMsg = {
+          type: 'register',
             client_id: clientId,
-            timestamp: safeTimestamp() // Use safe timestamp
+          client_type: 'tui',
+          timestamp: Date.now()
           };
           
-          ws.send(JSON.stringify(statusRequest));
-          addLog('Sent status request');
+        ws.send(JSON.stringify(registerMsg));
+        addLog('Sent registration message');
         } catch (e) {
-          addLog(`Error sending status request: ${e.message}`);
+        addLog(`Error sending registration: ${e.message}`);
         }
-      }, 500);
       
-      // Set up a status request interval
+      // Set up ping interval to keep connection alive
+      clearInterval(pingInterval);
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
-            // Send a status request message
-            const statusRequest = {
-              type: 'GET_STATUS',
+            // Send ping message
+            const pingMsg = {
+              type: 'ping',
               client_id: clientId,
-              timestamp: safeTimestamp() // Use safe timestamp
+              timestamp: Date.now()
             };
             
-            ws.send(JSON.stringify(statusRequest));
-            appState.lastPingTime = safeTimestamp(); // Use safe timestamp
-            addLog('Sent periodic status request');
-            
-            // Check if we've received a response for the last request
-            const currentTime = safeTimestamp();
-            if (currentTime - appState.lastStatusTime > 30000 && appState.lastStatusTime !== 0) {
-              addLog('No status response received for 30 seconds, reconnecting');
-              clearInterval(pingInterval);
-              try {
-                ws.terminate();
+            ws.send(JSON.stringify(pingMsg));
+            appState.lastPingTime = Date.now();
+            addLog('Sent ping message');
               } catch (e) {
-                // Ignore errors
-              }
-              setTimeout(() => connectToWebSocket(), 1000);
-            }
-          } catch (e) {
-            addLog(`Error sending status request: ${e.message}`);
+            addLog(`Error sending ping: ${e.message}`);
             clearInterval(pingInterval);
           }
         } else {
           // WebSocket is not open, clear the interval
-          addLog('WebSocket not open, clearing status interval');
+          addLog('WebSocket not open, clearing ping interval');
           clearInterval(pingInterval);
         }
-      }, 30000); // Send a status request every 30 seconds
+      }, 25000); // Send ping every 25 seconds (server checks every 30)
     });
     
     ws.on('message', (data) => {
@@ -206,7 +182,7 @@ function connectToWebSocket() {
             addLog('This appears to be a status message, handling as STATUS type');
             // Store the status information if needed
             appState.wsMessages++;
-            appState.lastStatusTime = safeTimestamp(); // Use safe timestamp
+            appState.lastStatusTime = Date.now();
             return;
           }
           
@@ -217,17 +193,41 @@ function connectToWebSocket() {
         
         // Handle different message types
         switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
+          case 'PONG':
+            appState.lastPingTime = Date.now();
+            addLog('Received pong response');
+            break;
+            
           case 'STATUS':
             addLog(`Received status update`);
-            appState.lastStatusTime = safeTimestamp(); // Use safe timestamp
+            appState.lastStatusTime = Date.now();
+            
+            // Store commands if available
+            if (message.data && message.data.commands) {
+              appState.commands = message.data.commands;
+              addLog(`Updated commands list (${appState.commands.length} commands)`);
+            }
             break;
             
           case 'COMMANDS':
             addLog(`Received commands list`);
+            if (message.data) {
+              appState.commands = message.data;
+              addLog(`Updated commands list (${appState.commands.length} commands)`);
+            }
             break;
             
           case 'CHAT_MESSAGE':
-            addLog(`Received chat message from ${message.data?.username || 'unknown'}`);
+            const chatData = message.data || {};
+            addLog(`Received chat message from ${chatData.username || 'unknown'}`);
+            
+            // Add to chat messages
+            addChatMessage(
+              chatData.username || 'unknown',
+              chatData.message || '',
+              chatData.channel || '#unknown',
+              chatData.badges || {}
+            );
             break;
             
           case 'CONNECTION_STATE':
@@ -237,7 +237,7 @@ function connectToWebSocket() {
           case 'ERROR':
             addLog(`Received error from server: ${message.error || 'Unknown error'}`);
             appState.serverErrors.push({
-              time: safeISOString(safeTimestamp()), // Use safe ISO string
+              time: new Date().toISOString(),
               error: message.error || 'Unknown error'
             });
             break;
@@ -271,7 +271,7 @@ function connectToWebSocket() {
       addLog(`WebSocket error: ${error.message}`);
       appState.wsStatus = 'Error';
       appState.serverErrors.push({
-        time: safeISOString(safeTimestamp()), // Use safe ISO string
+        time: new Date().toISOString(),
         error: error.message
       });
       
@@ -283,7 +283,7 @@ function connectToWebSocket() {
     addLog(`Error creating WebSocket: ${error.message}`);
     appState.wsStatus = 'Error';
     appState.serverErrors.push({
-      time: safeISOString(safeTimestamp()), // Use safe ISO string
+      time: new Date().toISOString(),
       error: error.message
     });
     
@@ -302,312 +302,610 @@ function connectToWebSocket() {
   }
 }
 
-// Send a command to the WebSocket server
-function sendCommand(command, data = {}) {
+// API endpoints
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: appState.wsStatus,
+    messages: appState.wsMessages,
+    reconnectAttempts: appState.reconnectAttempts,
+    errors: appState.serverErrors.slice(-10) // Return last 10 errors
+  });
+});
+
+app.get('/api/logs', (req, res) => {
+  const count = parseInt(req.query.count) || 50;
+  res.json(appState.logs.slice(-count));
+});
+
+app.get('/api/chat', (req, res) => {
+  const count = parseInt(req.query.count) || 50;
+  res.json(appState.chatMessages.slice(-count));
+});
+
+app.get('/api/commands', (req, res) => {
+  res.json(appState.commands);
+});
+
+app.post('/api/command', (req, res) => {
+  const { command, channel } = req.body;
+  
+  if (!command) {
+    return res.status(400).json({ error: 'Command is required' });
+  }
+  
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    addLog('Cannot send command: WebSocket not connected');
-    return false;
+    return res.status(503).json({ error: 'WebSocket is not connected' });
   }
   
   try {
-    const message = {
-      type: command,
+    const commandMsg = {
+      type: 'EXECUTE_COMMAND',
+      command,
+      channel: channel || process.env.CHANNEL_NAME || '#channel',
       client_id: clientId,
-      data: data,
-      timestamp: safeTimestamp() // Use safe timestamp
+      timestamp: Date.now()
     };
     
-    ws.send(JSON.stringify(message));
+    ws.send(JSON.stringify(commandMsg));
     addLog(`Sent command: ${command}`);
-    return true;
+    
+    res.json({ success: true, message: `Command "${command}" sent` });
   } catch (error) {
     addLog(`Error sending command: ${error.message}`);
-    return false;
+    res.status(500).json({ error: error.message });
   }
-}
+});
 
-// Initialize WebSocket connection
-let ws = connectToWebSocket();
-
-// Create HTTP server
-const server = http.createServer((req, res) => {
-  // Parse URL
-  const url = new URL(req.url, `http://${req.headers.host}`);
+app.post('/api/chat', (req, res) => {
+  const { message, channel } = req.body;
   
-  // Handle different routes
-  switch(url.pathname) {
-    case '/exit':
-      res.setHeader('Content-Type', 'text/html');
-      res.write('<html><body><h1>MaxBot TUI is shutting down...</h1></body></html>');
-      res.end();
-      addLog('Exit command received via HTTP');
-      
-      // Try to close the WebSocket connection gracefully
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+  
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    const chatMsg = {
+      type: 'CHAT_COMMAND',
+      message,
+      channel: channel || process.env.CHANNEL_NAME || '#channel',
+      client_id: clientId,
+      timestamp: Date.now()
+    };
+    
+    ws.send(JSON.stringify(chatMsg));
+    addLog(`Sent chat message: ${message}`);
+    
+    res.json({ success: true, message: `Chat message sent` });
+  } catch (error) {
+    addLog(`Error sending chat message: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/exit', (req, res) => {
+  addLog('Exit requested via API');
+  res.json({ success: true, message: 'Exiting...' });
+  
+  // Send exit command to server if connected
       if (ws && ws.readyState === WebSocket.OPEN) {
         try {
-          const exitMessage = {
+      const exitMsg = {
             type: 'disconnect',
             client_id: clientId,
-            timestamp: safeTimestamp() // Use safe timestamp
+        timestamp: Date.now()
           };
-          ws.send(JSON.stringify(exitMessage));
+      
+      ws.send(JSON.stringify(exitMsg));
           addLog('Sent disconnect message');
-          
-          setTimeout(() => {
-            try {
-              ws.close();
             } catch (e) {
-              // Ignore errors
-            }
-          }, 500);
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-      
+      addLog(`Error sending disconnect message: ${e.message}`);
+    }
+  }
+  
+  // Schedule cleanup and exit
       setTimeout(() => {
+    cleanup();
         process.exit(0);
-      }, 1000);
-      break;
+  }, 500);
+});
+
+// Serve HTML for the control panel
+app.get('/', (req, res) => {
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaxBot TUI Control Panel</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #1e1e1e;
+        color: #e0e0e0;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: #2d2d2d;
+        border-radius: 5px;
+        margin-bottom: 10px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+      }
+      .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+      .connected { background-color: #4CAF50; }
+      .disconnected { background-color: #F44336; }
+      .error { background-color: #FF9800; }
       
-    case '/status':
-      const status = {
-        pid: process.pid,
-        uptime: Math.floor((safeTimestamp() - appState.startTime) / 1000),
-        memory: process.memoryUsage(),
-        wsStatus: appState.wsStatus,
-        wsMessages: appState.wsMessages,
-        reconnectAttempts: appState.reconnectAttempts,
-        lastPing: appState.lastPingTime ? safeISOString(appState.lastPingTime) : null,
-        lastPong: appState.lastPongTime ? safeISOString(appState.lastPongTime) : null,
-        clientId: clientId,
-        serverErrors: appState.serverErrors,
-        timestamp: safeISOString(safeTimestamp()) // Use safe ISO string
-      };
+      .main-content {
+        display: flex;
+        flex: 1;
+        gap: 10px;
+        overflow: hidden;
+      }
       
-      res.setHeader('Content-Type', 'application/json');
-      res.write(JSON.stringify(status, null, 2));
-      res.end();
-      break;
+      .panel {
+        flex: 1;
+        background-color: #2d2d2d;
+        border-radius: 5px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
       
-    case '/logs':
-      res.setHeader('Content-Type', 'application/json');
-      res.write(JSON.stringify(appState.logs, null, 2));
-      res.end();
-      break;
+      .panel-header {
+        font-weight: bold;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #444;
+      }
       
-    case '/reconnect':
-      if (ws) {
-        try {
-          if (ws.readyState === WebSocket.OPEN) {
-            const disconnectMessage = {
-              type: 'disconnect',
-              client_id: clientId,
-              timestamp: safeTimestamp() // Use safe timestamp
-            };
-            ws.send(JSON.stringify(disconnectMessage));
-            addLog('Sent disconnect message');
-          }
-          
-          setTimeout(() => {
-            try {
-              ws.terminate();
-            } catch (e) {
-              // Ignore errors
-            }
-            ws = connectToWebSocket();
-          }, 500);
-        } catch (e) {
-          addLog(`Error during reconnect: ${e.message}`);
-          ws = connectToWebSocket();
+      .logs-container, .chat-container {
+        flex: 1;
+        overflow-y: auto;
+        font-family: monospace;
+        background-color: #1a1a1a;
+        padding: 10px;
+        border-radius: 3px;
+      }
+      
+      .log-entry {
+        margin-bottom: 5px;
+        word-wrap: break-word;
+      }
+      
+      .chat-entry {
+        margin-bottom: 8px;
+        word-wrap: break-word;
+      }
+      
+      .chat-username {
+        font-weight: bold;
+        color: #4CAF50;
+      }
+      
+      .chat-time {
+        color: #888;
+        font-size: 0.8em;
+      }
+      
+      .chat-message {
+        margin-top: 2px;
+      }
+      
+      .input-container {
+        display: flex;
+        margin-top: 10px;
+      }
+      
+      input[type="text"] {
+        flex: 1;
+        padding: 8px;
+        border: none;
+        border-radius: 3px;
+        background-color: #3a3a3a;
+        color: #e0e0e0;
+      }
+      
+      button {
+        padding: 8px 15px;
+        margin-left: 5px;
+        border: none;
+        border-radius: 3px;
+        background-color: #4CAF50;
+        color: white;
+        cursor: pointer;
+      }
+      
+      button:hover {
+        background-color: #45a049;
+      }
+      
+      button.danger {
+        background-color: #F44336;
+      }
+      
+      button.danger:hover {
+        background-color: #d32f2f;
+      }
+      
+      .commands-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+      }
+      
+      .command-button {
+        padding: 5px 10px;
+        background-color: #3a3a3a;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      
+      .command-button:hover {
+        background-color: #4a4a4a;
+      }
+      
+      .command-button.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      @media (max-width: 768px) {
+        .main-content {
+          flex-direction: column;
         }
-      } else {
-        ws = connectToWebSocket();
-      }
-      
-      res.setHeader('Content-Type', 'text/html');
-      res.write('<html><body><h1>Reconnecting to WebSocket server...</h1><script>setTimeout(() => { window.location.href = "/"; }, 1000);</script></body></html>');
-      res.end();
-      break;
-      
-    case '/send':
-      // Get command from query parameters
-      const command = url.searchParams.get('command');
-      
-      if (!command) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.write(JSON.stringify({ error: 'Missing command parameter' }));
-        res.end();
-        break;
-      }
-      
-      // Try to parse data parameter as JSON
-      let data = {};
-      const dataParam = url.searchParams.get('data');
-      if (dataParam) {
-        try {
-          data = JSON.parse(dataParam);
-        } catch (e) {
-          res.statusCode = 400;
-          res.setHeader('Content-Type', 'application/json');
-          res.write(JSON.stringify({ error: 'Invalid data parameter, must be valid JSON' }));
-          res.end();
-          break;
-        }
-      }
-      
-      // Send the command
-      const success = sendCommand(command, data);
-      
-      res.setHeader('Content-Type', 'application/json');
-      res.write(JSON.stringify({ success, command, data }));
-      res.end();
-      break;
-      
-    default:
-      // Default page (dashboard)
-      res.setHeader('Content-Type', 'text/html');
-      res.write(`
-        <html>
-        <head>
-          <title>MaxBot TUI Control</title>
-          <meta http-equiv="refresh" content="5">
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1, h2 { color: #333; }
-            .button { 
-              display: inline-block; 
-              background-color: #f44336; 
-              color: white; 
-              padding: 14px 20px; 
-              margin: 8px 0; 
-              border: none; 
-              border-radius: 4px; 
-              cursor: pointer; 
-              font-size: 16px;
-            }
-            .button:hover { background-color: #d32f2f; }
-            .button.blue { background-color: #2196F3; }
-            .button.blue:hover { background-color: #0b7dda; }
-            .button.green { background-color: #4CAF50; }
-            .button.green:hover { background-color: #3e8e41; }
-            .info { background-color: #f1f1f1; padding: 10px; border-radius: 4px; margin-bottom: 20px; }
-            .status-connected { color: green; font-weight: bold; }
-            .status-disconnected { color: red; font-weight: bold; }
-            .status-error { color: orange; font-weight: bold; }
-            .logs { 
-              height: 300px; 
-              overflow-y: auto; 
-              background-color: #f8f8f8; 
-              padding: 10px; 
-              border: 1px solid #ddd; 
-              font-family: monospace;
-              margin-top: 20px;
-            }
-            .log-entry {
-              margin: 0;
-              padding: 2px 0;
-              border-bottom: 1px solid #eee;
-            }
-            .command-form {
-              margin-top: 20px;
-              padding: 10px;
-              background-color: #f1f1f1;
-              border-radius: 4px;
-            }
-            .command-form input, .command-form textarea {
-              width: 100%;
-              padding: 8px;
-              margin: 5px 0;
-              box-sizing: border-box;
-            }
-            .errors {
-              background-color: #ffebee;
-              padding: 10px;
-              border-radius: 4px;
-              margin-top: 20px;
-              border-left: 4px solid #f44336;
-            }
-            .error-entry {
-              margin: 5px 0;
-              padding: 5px;
-              border-bottom: 1px solid #ffcdd2;
             }
           </style>
         </head>
         <body>
+    <div class="container">
+      <div class="header">
           <h1>MaxBot TUI Control Panel</h1>
-          
-          <div class="info">
-            <p>Process ID: ${process.pid}</p>
-            <p>Client ID: ${clientId}</p>
-            <p>Uptime: ${Math.floor((safeTimestamp() - appState.startTime) / 1000)} seconds</p>
-            <p>Started at: ${safeISOString(appState.startTime)}</p>
-            <p>WebSocket Status: <span class="status-${appState.wsStatus.toLowerCase()}">${appState.wsStatus}</span></p>
-            <p>WebSocket Messages Received: ${appState.wsMessages}</p>
-            <p>Reconnect Attempts: ${appState.reconnectAttempts}</p>
-            <p>Last Ping: ${appState.lastPingTime ? safeISOString(appState.lastPingTime) : 'Never'}</p>
-            <p>Last Pong: ${appState.lastPongTime ? safeISOString(appState.lastPongTime) : 'Never'}</p>
+        <div class="status">
+          <div id="status-indicator" class="status-indicator disconnected"></div>
+          <span id="status-text">Disconnected</span>
+        </div>
+      </div>
+      
+      <div class="main-content">
+        <div class="panel">
+          <div class="panel-header">Chat</div>
+          <div id="chat-container" class="chat-container"></div>
+          <div class="input-container">
+            <input type="text" id="chat-input" placeholder="Type a message...">
+            <button id="send-chat">Send</button>
+          </div>
           </div>
           
-          <div>
-            <a href="/exit" class="button">Exit Application</a>
-            <a href="/status" class="button blue">Get Status (JSON)</a>
-            <a href="/logs" class="button blue">Get Logs (JSON)</a>
-            <a href="/reconnect" class="button green">Reconnect WebSocket</a>
+        <div class="panel">
+          <div class="panel-header">Logs</div>
+          <div id="logs-container" class="logs-container"></div>
+          <div class="commands-container" id="commands-container"></div>
+          <div class="input-container">
+            <input type="text" id="command-input" placeholder="Type a command...">
+            <button id="send-command">Execute</button>
+            <button id="exit-button" class="danger">Exit</button>
+          </div>
+        </div>
+      </div>
           </div>
           
-          <div class="command-form">
-            <h2>Send Command</h2>
-            <form action="/send" method="get">
-              <label for="command">Command:</label>
-              <input type="text" id="command" name="command" placeholder="Enter command (e.g., ping)" required>
+    <script>
+      // Elements
+      const statusIndicator = document.getElementById('status-indicator');
+      const statusText = document.getElementById('status-text');
+      const logsContainer = document.getElementById('logs-container');
+      const chatContainer = document.getElementById('chat-container');
+      const commandsContainer = document.getElementById('commands-container');
+      const chatInput = document.getElementById('chat-input');
+      const commandInput = document.getElementById('command-input');
+      const sendChatButton = document.getElementById('send-chat');
+      const sendCommandButton = document.getElementById('send-command');
+      const exitButton = document.getElementById('exit-button');
+      
+      // Update status
+      function updateStatus() {
+        fetch('/api/status')
+          .then(response => response.json())
+          .then(data => {
+            statusText.textContent = data.status;
+            statusIndicator.className = 'status-indicator';
+            
+            if (data.status === 'Connected') {
+              statusIndicator.classList.add('connected');
+            } else if (data.status === 'Error') {
+              statusIndicator.classList.add('error');
+            } else {
+              statusIndicator.classList.add('disconnected');
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching status:', error);
+            statusText.textContent = 'Error';
+            statusIndicator.className = 'status-indicator error';
+          });
+      }
+      
+      // Update logs
+      function updateLogs() {
+        fetch('/api/logs?count=100')
+          .then(response => response.json())
+          .then(logs => {
+            logsContainer.innerHTML = '';
+            logs.forEach(log => {
+              const logEntry = document.createElement('div');
+              logEntry.className = 'log-entry';
+              logEntry.textContent = \`[\${new Date(log.time).toLocaleTimeString()}] \${log.message}\`;
+              logsContainer.appendChild(logEntry);
+            });
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+          })
+          .catch(error => {
+            console.error('Error fetching logs:', error);
+          });
+      }
+      
+      // Update chat
+      function updateChat() {
+        fetch('/api/chat?count=100')
+          .then(response => response.json())
+          .then(messages => {
+            chatContainer.innerHTML = '';
+            messages.forEach(msg => {
+              const chatEntry = document.createElement('div');
+              chatEntry.className = 'chat-entry';
               
-              <label for="data">Data (JSON):</label>
-              <textarea id="data" name="data" placeholder='{"key": "value"}'></textarea>
+              const chatHeader = document.createElement('div');
+              chatHeader.innerHTML = \`<span class="chat-username">\${msg.username}</span> <span class="chat-time">[\${new Date(msg.time).toLocaleTimeString()}]</span>\`;
               
-              <input type="submit" value="Send Command" class="button green">
-            </form>
-            <p><strong>Note:</strong> Avoid using 'status_request' command as it causes a server error.</p>
-          </div>
-          
-          ${appState.serverErrors.length > 0 ? `
-          <h2>Server Errors</h2>
-          <div class="errors">
-            ${appState.serverErrors.map(error => `
-              <div class="error-entry">
-                <strong>${error.time}</strong>: ${error.error}
-              </div>
-            `).join('')}
-          </div>
-          ` : ''}
-          
-          <h2>Application Logs</h2>
-          <div class="logs">
-            ${appState.logs.map(log => `<p class="log-entry">${log.message}</p>`).join('')}
-          </div>
-        </body>
-        </html>
-      `);
-      res.end();
-      break;
-  }
+              const chatMessage = document.createElement('div');
+              chatMessage.className = 'chat-message';
+              chatMessage.textContent = msg.message;
+              
+              chatEntry.appendChild(chatHeader);
+              chatEntry.appendChild(chatMessage);
+              chatContainer.appendChild(chatEntry);
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          })
+          .catch(error => {
+            console.error('Error fetching chat:', error);
+          });
+      }
+      
+      // Update commands
+      function updateCommands() {
+        fetch('/api/commands')
+          .then(response => response.json())
+          .then(commands => {
+            commandsContainer.innerHTML = '';
+            commands.forEach(cmd => {
+              const commandButton = document.createElement('div');
+              commandButton.className = 'command-button';
+              if (!cmd.enabled) {
+                commandButton.classList.add('disabled');
+              }
+              commandButton.textContent = cmd.trigger || cmd.name;
+              commandButton.title = cmd.description || '';
+              
+              if (cmd.enabled) {
+                commandButton.addEventListener('click', () => {
+                  commandInput.value = cmd.trigger || cmd.name;
+                });
+              }
+              
+              commandsContainer.appendChild(commandButton);
+            });
+          })
+          .catch(error => {
+            console.error('Error fetching commands:', error);
+          });
+      }
+      
+      // Send chat message
+      function sendChatMessage() {
+        const message = chatInput.value.trim();
+        if (!message) return;
+        
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ message })
+        })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              chatInput.value = '';
+              updateChat();
+            } else {
+              console.error('Error sending chat message:', data.error);
+            }
+          })
+          .catch(error => {
+            console.error('Error sending chat message:', error);
+          });
+      }
+      
+      // Send command
+      function sendCommand() {
+        const command = commandInput.value.trim();
+        if (!command) return;
+        
+        fetch('/api/command', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ command })
+        })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              commandInput.value = '';
+              updateLogs();
+            } else {
+              console.error('Error sending command:', data.error);
+            }
+          })
+          .catch(error => {
+            console.error('Error sending command:', error);
+          });
+      }
+      
+      // Exit application
+      function exitApplication() {
+        if (confirm('Are you sure you want to exit?')) {
+          fetch('/api/exit', {
+            method: 'POST'
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert('Application is exiting. You can close this window.');
+              }
+            })
+            .catch(error => {
+              console.error('Error exiting application:', error);
+            });
+        }
+      }
+      
+      // Event listeners
+      sendChatButton.addEventListener('click', sendChatMessage);
+      chatInput.addEventListener('keypress', event => {
+        if (event.key === 'Enter') {
+          sendChatMessage();
+        }
+      });
+      
+      sendCommandButton.addEventListener('click', sendCommand);
+      commandInput.addEventListener('keypress', event => {
+        if (event.key === 'Enter') {
+          sendCommand();
+        }
+      });
+      
+      exitButton.addEventListener('click', exitApplication);
+      
+      // Initial updates
+      updateStatus();
+      updateLogs();
+      updateChat();
+      updateCommands();
+      
+      // Set up polling
+      setInterval(updateStatus, 5000);
+      setInterval(updateLogs, 2000);
+      setInterval(updateChat, 2000);
+      setInterval(updateCommands, 10000);
+    </script>
+  </body>
+  </html>
+  `;
+  
+  res.send(html);
 });
 
-// Start the server on port 3000
-const PORT = 3000;
+// Start the server
+const PORT = process.env.HTTP_PORT || 3000;
 server.listen(PORT, () => {
-  addLog(`HTTP control server running at http://localhost:${PORT}`);
-  addLog(`To exit the application, visit http://localhost:${PORT}/exit`);
+  console.log(`MaxBot TUI HTTP Control started on http://localhost:${PORT}`);
+  
+  // Connect to WebSocket server
+  connectToWebSocket();
 });
 
-// Set up a safety timeout to force exit after 1 hour
-addLog('Setting up safety timeout (1 hour)');
-setTimeout(() => {
-  addLog('Safety timeout reached, forcing exit');
-  process.exit(0);
-}, 60 * 60 * 1000);
+// Cleanup function
+function cleanup() {
+  addLog('Cleaning up...');
+  
+  // Close WebSocket connection
+  if (ws) {
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        const disconnectMsg = {
+          type: 'disconnect',
+          client_id: clientId,
+          timestamp: Date.now()
+        };
+        
+        ws.send(JSON.stringify(disconnectMsg));
+        ws.close();
+      }
+    } catch (e) {
+      addLog(`Error closing WebSocket: ${e.message}`);
+    }
+  }
+  
+  // Clear intervals
+  clearInterval(pingInterval);
+  clearTimeout(safetyTimeout);
+  
+  // Remove PID file
+  try {
+    if (fs.existsSync(pidFile)) {
+      fs.unlinkSync(pidFile);
+      addLog('PID file removed');
+    }
+  } catch (e) {
+    addLog(`Error removing PID file: ${e.message}`);
+  }
+}
 
-// Log startup
-addLog('MaxBot TUI HTTP Control started'); 
+// Handle exit events
+process.on('exit', cleanup);
+process.on('SIGINT', () => {
+  addLog('SIGINT received, exiting...');
+  cleanup();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  addLog('SIGTERM received, exiting...');
+  cleanup();
+  process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  addLog(`Uncaught exception: ${error.message}`);
+  addLog(error.stack);
+  cleanup();
+  process.exit(1);
+});
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  addLog(`Unhandled rejection at: ${promise}, reason: ${reason}`);
+  cleanup();
+  process.exit(1);
+});
+
+console.log('MaxBot TUI HTTP Control started'); 
