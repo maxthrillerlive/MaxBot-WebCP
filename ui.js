@@ -6,36 +6,17 @@ class BotUI {
         this.initialized = false;
         
         // Log directly to console
-        console.log('EMERGENCY MODE: Will attempt to exit in 5 seconds');
+        console.log('EMERGENCY MODE: Will exit in 5 seconds');
         console.log(`Process ID: ${process.pid}`);
         
-        // Use the most direct method to exit
-        // This bypasses Node.js event loop entirely
+        // Use a cleaner exit method that doesn't generate a core dump
         const exitNow = () => {
-            console.log('FORCING EXIT NOW');
-            try {
-                // Try multiple exit methods
-                process.abort(); // This is the most aggressive exit method
-            } catch (e) {
-                try {
-                    process.kill(process.pid, 'SIGKILL');
-                } catch (e2) {
-                    process.exit(1);
-                }
-            }
+            console.log('EMERGENCY EXIT: Terminating process');
+            process.exit(1); // Exit with error code 1
         };
         
-        // Set multiple timers with different methods
-        setTimeout(exitNow, 5000);
-        
-        // Also try with setImmediate and nextTick for redundancy
-        setTimeout(() => {
-            setImmediate(exitNow);
-        }, 5500);
-        
-        setTimeout(() => {
-            process.nextTick(exitNow);
-        }, 6000);
+        // Set a single timer for exit
+        this.exitTimeout = setTimeout(exitNow, 5000);
         
         // Create a fallback file with the process ID
         try {
@@ -48,11 +29,6 @@ class BotUI {
         } catch (e) {
             console.error('Failed to create PID file:', e);
         }
-
-        this.exitTimeout = setTimeout(() => {
-            console.log('Emergency exit timeout reached. Forcing exit.');
-            process.exit(1);
-        }, 30000); // 30 seconds is enough for emergency mode
     }
 
     setupScreen() {
@@ -74,7 +50,7 @@ class BotUI {
                 ║                    !!! EMERGENCY MODE !!!                  ║
                 ╠════════════════════════════════════════════════════════════╣
                 ║                                                            ║
-                ║  APPLICATION WILL FORCEFULLY TERMINATE IN 5 SECONDS        ║
+                ║  APPLICATION WILL TERMINATE IN 5 SECONDS                   ║
                 ║                                                            ║
                 ║  Process ID: ${process.pid}                                ║
                 ║                                                            ║
