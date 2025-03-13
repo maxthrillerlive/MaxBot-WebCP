@@ -40,7 +40,8 @@ const appState = {
     botUsername: '',
     botChannels: [],
     connectionHistory: [],
-    botStatus: null
+    botStatus: null,
+    botPid: null
   }
 };
 
@@ -270,8 +271,20 @@ function connectToWebSocket() {
             appState.stats.botMemoryUsage = message.memory || {};
             appState.stats.botUptime = message.uptime || 0;
             
+            // Store the process ID
+            appState.stats.botPid = message.processId;
+            
+            // Update connection state
+            appState.wsStatus = message.connectionState || 'Unknown';
+            
             // Store the entire status object for reference
             appState.stats.botStatus = message;
+            
+            // Store commands if available
+            if (message.commands) {
+              appState.commands = message.commands;
+              addLog(`Updated commands list (${appState.commands.length} commands)`);
+            }
             
             return;
           }
@@ -299,6 +312,12 @@ function connectToWebSocket() {
               appState.stats.botChannels = message.data.channels || [];
               appState.stats.botMemoryUsage = message.data.memory || {};
               appState.stats.botUptime = message.data.uptime || 0;
+              
+              // Store the process ID
+              appState.stats.botPid = message.data.processId;
+              
+              // Update connection state
+              appState.wsStatus = message.data.connectionState || 'Unknown';
               
               // Store the entire status object for reference
               appState.stats.botStatus = message.data;
@@ -476,7 +495,8 @@ app.get('/api/stats', (req, res) => {
       uptimeFormatted: botUptimeFormatted,
       memoryUsage: appState.stats.botMemoryUsage,
       lastStatusUpdate: appState.stats.lastStatusUpdate,
-      pid: appState.stats.botStatus && appState.stats.botStatus.processId
+      pid: appState.stats.botPid,
+      status: appState.wsStatus
     },
     controlPanel: {
       startTime: appState.stats.startTime,
@@ -1714,44 +1734,51 @@ app.get('/', (req, res) => {
       function updateAdminPanel() {
         fetch('/api/stats')
           .then(response => response.json())
-          .then(stats => {
+          .then(data => {
             // Update bot status
-            if (stats.connection && stats.connection.status) {
-              adminBotStatus.textContent = stats.connection.status;
+            if (data.bot) {
+              // Update status display
+              adminBotStatus.textContent = data.connection.status || data.bot.status || 'Unknown';
               
               // Set status color
               adminBotStatus.className = 'status-value';
-              if (stats.connection.status === 'Connected') {
+              if (adminBotStatus.textContent === 'Connected') {
                 adminBotStatus.classList.add('status-connected');
-              } else if (stats.connection.status === 'Error') {
+              } else if (adminBotStatus.textContent === 'Error') {
                 adminBotStatus.classList.add('status-error');
               } else {
                 adminBotStatus.classList.add('status-disconnected');
               }
+              
+              // Update uptime
+              if (data.bot.uptimeFormatted) {
+                adminBotUptime.textContent = data.bot.uptimeFormatted;
+              } else if (data.bot.uptime) {
+                const hours = Math.floor(data.bot.uptime / 3600);
+                const minutes = Math.floor((data.bot.uptime % 3600) / 60);
+                const seconds = data.bot.uptime % 60;
+                adminBotUptime.textContent = `${hours}h ${minutes}m ${seconds}s`;
+              } else {
+                adminBotUptime.textContent = '-';
+              }
+              
+              // Update PID
+              if (data.bot.pid) {
+                adminBotPid.textContent = data.bot.pid;
+              } else {
+                adminBotPid.textContent = '-';
+              }
             } else {
               adminBotStatus.textContent = 'Unknown';
-              adminBotStatus.className = 'status-value';
-            }
-            
-            // Update uptime
-            if (stats.bot && stats.bot.uptimeFormatted) {
-              adminBotUptime.textContent = stats.bot.uptimeFormatted;
-            } else {
               adminBotUptime.textContent = '-';
-            }
-            
-            // Update PID
-            if (stats.bot && stats.bot.pid) {
-              adminBotPid.textContent = stats.bot.pid;
-            } else {
               adminBotPid.textContent = '-';
             }
             
             // Update connection history
-            if (stats.controlPanel && stats.controlPanel.connectionHistory) {
+            if (data.controlPanel && data.controlPanel.connectionHistory) {
               adminConnectionHistory.innerHTML = '';
               
-              stats.controlPanel.connectionHistory.forEach(entry => {
+              data.controlPanel.connectionHistory.forEach(entry => {
                 const historyEntry = document.createElement('div');
                 historyEntry.className = 'history-entry';
                 
@@ -1764,17 +1791,6 @@ app.get('/', (req, res) => {
                 
                 adminConnectionHistory.appendChild(historyEntry);
               });
-            }
-            
-            // Enable/disable buttons based on status
-            if (stats.connection && stats.connection.status === 'Connected') {
-              startBtn.disabled = true;
-              restartBtn.disabled = false;
-              shutdownBtn.disabled = false;
-            } else {
-              startBtn.disabled = false;
-              restartBtn.disabled = true;
-              shutdownBtn.disabled = true;
             }
           })
           .catch(error => {
