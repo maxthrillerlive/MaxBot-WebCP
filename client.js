@@ -52,7 +52,7 @@ class BotClient extends EventEmitter {
             return;
         }
         
-        const serverUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+        const serverUrl = 'ws://192.168.1.122:8080';
         console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
         try {
@@ -440,7 +440,7 @@ class BotClient extends EventEmitter {
     async isBotRunning() {
         try {
             // Try to make a quick connection to check if the bot is running
-            const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+            const wsUrl = 'ws://192.168.1.122:8080';
             
             return new Promise((resolve) => {
                 const ws = new WebSocket(wsUrl);
