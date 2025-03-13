@@ -1,4 +1,4 @@
-// Simplify the StatusPanel class to display hardcoded information
+// Update the StatusPanel class to fix uptime and reorder fields
 const blessed = require('blessed');
 
 class StatusPanel {
@@ -20,31 +20,41 @@ class StatusPanel {
       }
     });
     
+    // Track start time for accurate uptime calculation
+    this.startTime = Date.now();
+    
     // Set hardcoded status information
     this.setHardcodedStatus();
     
-    // Update status every 5 seconds to show it's working
+    // Update status every second to show it's working
     setInterval(() => {
       this.setHardcodedStatus();
-    }, 5000);
+    }, 1000);
   }
   
   setHardcodedStatus() {
     try {
-      // Get current time for uptime simulation
-      const uptime = Math.floor(process.uptime());
+      // Calculate uptime based on start time
+      const uptime = Math.floor((Date.now() - this.startTime) / 1000);
       const hours = Math.floor(uptime / 3600);
       const minutes = Math.floor((uptime % 3600) / 60);
       const seconds = uptime % 60;
       const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
       
-      // Set hardcoded content
+      // Get memory usage
+      const memoryUsage = process.memoryUsage();
+      const rss = Math.round(memoryUsage.rss / 1024 / 1024);
+      const heapTotal = Math.round(memoryUsage.heapTotal / 1024 / 1024);
+      const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024);
+      
+      // Set hardcoded content with reordered fields
       this.panel.setContent(
         `{bold}Connection:{/bold} {green-fg}Connected{/green-fg}\n` +
+        `{bold}Username:{/bold} Max2d2\n` +
         `{bold}Channel:{/bold} #maxthriller\n` +
         `{bold}Uptime:{/bold} ${uptimeStr}\n` +
-        `{bold}Username:{/bold} Max2d2\n` +
         `{bold}Process ID:{/bold} ${process.pid}\n` +
+        `{bold}Memory:{/bold} RSS: ${rss}MB, Heap: ${heapUsed}/${heapTotal}MB\n` +
         `{bold}Last Updated:{/bold} ${new Date().toLocaleTimeString()}`
       );
       
@@ -52,8 +62,6 @@ class StatusPanel {
       if (this.panel.screen) {
         this.panel.screen.render();
       }
-      
-      console.log('Hardcoded status updated');
     } catch (error) {
       console.error('Error setting hardcoded status:', error);
     }
