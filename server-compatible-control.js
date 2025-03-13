@@ -863,6 +863,51 @@ app.get('/', (req, res) => {
           min-width: 100%;
         }
       }
+      
+      .chat-badges {
+        display: inline-flex;
+        margin-right: 5px;
+      }
+      
+      .chat-badge {
+        width: 18px;
+        height: 18px;
+        margin-right: 2px;
+        border-radius: 3px;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+      }
+      
+      .badge-broadcaster {
+        background-color: #e91916;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
+      }
+      
+      .badge-moderator {
+        background-color: #34ae0a;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1');
+      }
+      
+      .badge-vip {
+        background-color: #e005b9;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/1');
+      }
+      
+      .badge-subscriber {
+        background-color: #6441a5;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1');
+      }
+      
+      .badge-premium {
+        background-color: #009cdc;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/bbbe0db0-a598-423e-86d0-f9fb98ca1933/1');
+      }
+      
+      .badge-bot {
+        background-color: #0099ff;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
+      }
     </style>
   </head>
   <body>
@@ -1079,8 +1124,73 @@ app.get('/', (req, res) => {
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
+              // Create badges container
+              const badgesContainer = document.createElement('div');
+              badgesContainer.className = 'chat-badges';
+              
+              // Add badges based on the badges object
+              if (msg.badges) {
+                // Process broadcaster badge
+                if (msg.badges.broadcaster) {
+                  const broadcasterBadge = document.createElement('div');
+                  broadcasterBadge.className = 'chat-badge badge-broadcaster';
+                  broadcasterBadge.title = 'Broadcaster';
+                  badgesContainer.appendChild(broadcasterBadge);
+                }
+                
+                // Process moderator badge
+                if (msg.badges.moderator) {
+                  const modBadge = document.createElement('div');
+                  modBadge.className = 'chat-badge badge-moderator';
+                  modBadge.title = 'Moderator';
+                  badgesContainer.appendChild(modBadge);
+                }
+                
+                // Process VIP badge
+                if (msg.badges.vip) {
+                  const vipBadge = document.createElement('div');
+                  vipBadge.className = 'chat-badge badge-vip';
+                  vipBadge.title = 'VIP';
+                  badgesContainer.appendChild(vipBadge);
+                }
+                
+                // Process subscriber badge
+                if (msg.badges.subscriber) {
+                  const subBadge = document.createElement('div');
+                  subBadge.className = 'chat-badge badge-subscriber';
+                  subBadge.title = 'Subscriber';
+                  badgesContainer.appendChild(subBadge);
+                }
+                
+                // Process premium badge
+                if (msg.badges.premium) {
+                  const premiumBadge = document.createElement('div');
+                  premiumBadge.className = 'chat-badge badge-premium';
+                  premiumBadge.title = 'Twitch Prime';
+                  badgesContainer.appendChild(premiumBadge);
+                }
+              }
+              
+              // Add bot badge for the bot's messages
+              if (msg.username.toLowerCase() === process.env.BOT_USERNAME?.toLowerCase() || 
+                  msg.username.toLowerCase() === 'max2d2') {
+                const botBadge = document.createElement('div');
+                botBadge.className = 'chat-badge badge-bot';
+                botBadge.title = 'Bot';
+                badgesContainer.appendChild(botBadge);
+              }
+              
               const chatHeader = document.createElement('div');
-              chatHeader.innerHTML = \`<span class="chat-username">\${msg.username}</span> <span class="chat-time">[\${new Date(msg.time).toLocaleTimeString()}]</span>\`;
+              chatHeader.style.display = 'flex';
+              chatHeader.style.alignItems = 'center';
+              
+              // Add badges to header
+              chatHeader.appendChild(badgesContainer);
+              
+              // Add username and timestamp
+              const userTimeContainer = document.createElement('div');
+              userTimeContainer.innerHTML = \`<span class="chat-username">\${msg.username}</span> <span class="chat-time">[\${new Date(msg.time).toLocaleTimeString()}]</span>\`;
+              chatHeader.appendChild(userTimeContainer);
               
               const chatMessage = document.createElement('div');
               chatMessage.className = 'chat-message';
