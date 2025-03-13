@@ -199,6 +199,20 @@ function connectToWebSocket() {
         // Check if the message has a type
         if (!message.type) {
             addLog(`Received message without type: ${JSON.stringify(message)}`);
+            
+            // Try to determine if this is a status message
+            if (message.connectionState && message.username && message.commands) {
+                addLog('This appears to be a status message, handling as STATUS type');
+                
+                // Handle as a status message
+                appState.wsMessages++;
+                
+                // Process status update
+                // You can add code here to update your UI with the status information
+                
+                return;
+            }
+            
             return;
         }
         
