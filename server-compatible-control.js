@@ -477,14 +477,14 @@ app.get('/api/stats', (req, res) => {
     const hours = Math.floor(appState.stats.botUptime / 3600);
     const minutes = Math.floor((appState.stats.botUptime % 3600) / 60);
     const seconds = appState.stats.botUptime % 60;
-    botUptimeFormatted = `${hours}h ${minutes}m ${seconds}s`;
+    botUptimeFormatted = hours + 'h ' + minutes + 'm ' + seconds + 's';
   }
   
   // Format control panel uptime
   const cpHours = Math.floor(controlPanelUptime / 3600);
   const cpMinutes = Math.floor((controlPanelUptime % 3600) / 60);
   const cpSeconds = controlPanelUptime % 60;
-  const controlPanelUptimeFormatted = `${cpHours}h ${cpMinutes}m ${cpSeconds}s`;
+  const controlPanelUptimeFormatted = cpHours + 'h ' + cpMinutes + 'm ' + cpSeconds + 's';
   
   // Return combined stats
   res.json({
@@ -1757,7 +1757,7 @@ app.get('/', (req, res) => {
                 const hours = Math.floor(data.bot.uptime / 3600);
                 const minutes = Math.floor((data.bot.uptime % 3600) / 60);
                 const seconds = data.bot.uptime % 60;
-                adminBotUptime.textContent = `${hours}h ${minutes}m ${seconds}s`;
+                adminBotUptime.textContent = hours + 'h ' + minutes + 'm ' + seconds + 's';
               } else {
                 adminBotUptime.textContent = '-';
               }
@@ -1783,11 +1783,10 @@ app.get('/', (req, res) => {
                 historyEntry.className = 'history-entry';
                 
                 const time = new Date(entry.time).toLocaleTimeString();
-                historyEntry.innerHTML = \`
-                  <span class="history-time">\${time}</span>
-                  <span class="history-event">\${entry.state}</span>
-                  \${entry.reason ? \`<span class="history-reason">(\${entry.reason})</span>\` : ''}
-                \`;
+                historyEntry.innerHTML = 
+                  '<span class="history-time">' + time + '</span>' +
+                  '<span class="history-event">' + entry.state + '</span>' +
+                  (entry.reason ? '<span class="history-reason">(' + entry.reason + ')</span>' : '');
                 
                 adminConnectionHistory.appendChild(historyEntry);
               });
