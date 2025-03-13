@@ -81,7 +81,6 @@ class BotClient extends EventEmitter {
                 
                 // Force a render to ensure UI is displayed
                 if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                    console.log('Forcing UI render after connection');
                     setTimeout(() => this.ui.screen.render(), 100);
                 }
             });
