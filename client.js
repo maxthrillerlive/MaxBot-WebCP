@@ -23,15 +23,20 @@ class BotClient extends EventEmitter {
             commands: []
         };
         
-        // Make sure ui is fully initialized before passing it to Fedora integration
-        if (ui && typeof ui.logToConsole === 'function') {
-            // Initialize Fedora integration if available
-            fedora.initialize(this, ui);
-        } else {
-            console.log('UI not fully initialized, deferring Fedora integration');
-            // We'll initialize it later when UI is ready
-        }
+        // We'll initialize Fedora later when UI is ready
+        console.log('BotClient initialized, deferring Fedora integration');
         this.connect();
+    }
+
+    // Helper method to safely log to console
+    safeLog(message) {
+        if (this.ui && typeof this.ui.logToConsole === 'function') {
+            this.ui.logToConsole(message);
+        } else {
+            // Strip any blessed tags for console output
+            const cleanMessage = message.replace(/\{[^}]+\}/g, '');
+            console.log(cleanMessage);
+        }
     }
 
     connect() {
@@ -41,146 +46,146 @@ class BotClient extends EventEmitter {
         if (this.connectionState === 'connecting') return;
         
         this.connectionState = 'connecting';
-        this.ui.logToConsole('{yellow-fg}Connecting to bot server...{/yellow-fg}');
+        this.safeLog('{yellow-fg}Connecting to bot server...{/yellow-fg}');
         
-        this.ws = new WebSocket(wsUrl);
+        try {
+            this.ws = new WebSocket(wsUrl);
 
-        // Set a connection timeout
-        const connectionTimeout = setTimeout(() => {
-            if (this.connectionState === 'connecting') {
-                this.ws.terminate();
-                this.connectionState = 'disconnected';
-                this.ui.logToConsole('{red-fg}Connection attempt timed out{/red-fg}');
-                this.handleReconnect();
-            }
-        }, 5000);
+            // Set a connection timeout
+            const connectionTimeout = setTimeout(() => {
+                if (this.connectionState === 'connecting') {
+                    this.ws.terminate();
+                    this.connectionState = 'disconnected';
+                    this.safeLog('{red-fg}Connection attempt timed out{/red-fg}');
+                    this.handleReconnect();
+                }
+            }, 5000);
 
-        this.ws.on('open', () => {
-            clearTimeout(connectionTimeout);
-            this.isConnected = true;
-            this.connectionState = 'connected';
-            this.reconnectAttempts = 0;
-            this.reconnectDelay = 1000;
-            this.requestStatus();
-            this.ui.logToConsole('{green-fg}Connected to bot server{/green-fg}');
-            
-            // If we were in the middle of a restart, clear that state
-            if (this.restartInProgress) {
-                this.restartInProgress = false;
-                this.ui.logToConsole('{green-fg}Bot restart completed successfully{/green-fg}');
-            }
-        });
-
-        this.ws.on('message', (data) => {
-            try {
-                const message = JSON.parse(data);
+            this.ws.on('open', () => {
+                clearTimeout(connectionTimeout);
+                this.isConnected = true;
+                this.connectionState = 'connected';
+                this.reconnectAttempts = 0;
+                this.reconnectDelay = 1000;
+                this.requestStatus();
+                this.safeLog('{green-fg}Connected to bot server{/green-fg}');
                 
-                // Handle D-Bus messages
-                if (message.type === 'dbus-message') {
-                    // Emit event for Fedora integration to handle
-                    this.emit('dbus-message', message.data);
+                // If we were in the middle of a restart, clear that state
+                if (this.restartInProgress) {
+                    this.restartInProgress = false;
+                    this.safeLog('{green-fg}Bot restart completed successfully{/green-fg}');
                 }
                 
-                // Handle D-Bus notifications
-                if (message.type === 'dbus-notification') {
-                    // Emit event for Fedora integration to handle
-                    this.emit('dbus-notification', message.data);
+                // Render the screen if UI is available
+                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
+                    this.ui.screen.render();
                 }
-                
-                // Handle log messages
-                if (message.type === 'log') {
-                    const { level, message: logMessage, timestamp } = message.data;
+            });
+
+            this.ws.on('message', (data) => {
+                try {
+                    const message = JSON.parse(data);
                     
-                    // Format based on log level
-                    let formattedMessage;
-                    switch (level) {
-                        case 'error':
-                            formattedMessage = `{red-fg}[ERROR] ${logMessage}{/red-fg}`;
-                            break;
-                        case 'warn':
-                            formattedMessage = `{yellow-fg}[WARN] ${logMessage}{/yellow-fg}`;
-                            break;
-                        case 'debug':
-                            formattedMessage = `{gray-fg}[DEBUG] ${logMessage}{/gray-fg}`;
-                            break;
-                        case 'info':
-                        default:
-                            formattedMessage = `{white-fg}[INFO] ${logMessage}{/white-fg}`;
-                            break;
+                    // Handle different message types
+                    if (message.type === 'status') {
+                        this.handleStatusUpdate(message.data);
+                    } else if (message.type === 'console') {
+                        this.safeLog(message.data.message);
+                    } else if (message.type === 'command-update') {
+                        this.handleCommandUpdate(message.data);
+                    } else if (message.type === 'dbus-message') {
+                        const { sender, message: content, timestamp } = message.data;
+                        this.safeLog(`{magenta-fg}[D-Bus] ${sender}:{/magenta-fg} ${content}`);
+                        this.emit('dbus-message', message.data);
+                    } else if (message.type === 'dbus-notification') {
+                        const { title, body, timestamp } = message.data;
+                        this.safeLog(`{magenta-fg}[Notification] ${title}:{/magenta-fg} ${body}`);
+                        this.emit('dbus-notification', message.data);
+                    } else if (message.type === 'log') {
+                        const { level, message: logMessage, timestamp } = message.data;
+                        
+                        // Format based on log level
+                        let formattedMessage;
+                        switch (level) {
+                            case 'error':
+                                formattedMessage = `{red-fg}[ERROR] ${logMessage}{/red-fg}`;
+                                break;
+                            case 'warn':
+                                formattedMessage = `{yellow-fg}[WARN] ${logMessage}{/yellow-fg}`;
+                                break;
+                            case 'debug':
+                                formattedMessage = `{gray-fg}[DEBUG] ${logMessage}{/gray-fg}`;
+                                break;
+                            case 'info':
+                            default:
+                                formattedMessage = `{white-fg}[INFO] ${logMessage}{/white-fg}`;
+                                break;
+                        }
+                        
+                        this.safeLog(formattedMessage);
+                        this.emit('log', message.data);
                     }
                     
-                    this.ui.logToConsole(formattedMessage);
-                    this.ui.screen.render();
-                    
-                    // Also emit an event for Fedora integration
-                    this.emit('log', message.data);
+                    // Render the screen if UI is available
+                    if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
+                        this.ui.screen.render();
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            });
+
+            this.ws.on('close', () => {
+                clearTimeout(connectionTimeout);
+                this.isConnected = false;
+                this.connectionState = 'disconnected';
+                this.safeLog('{red-fg}Disconnected from bot server{/red-fg}');
+                
+                // Update status to show disconnected
+                this.botStatus.connected = false;
+                this.updateStatusDisplay();
+                
+                // Don't attempt to reconnect if we're shutting down
+                if (!this.isShuttingDown) {
+                    this.handleReconnect();
                 }
                 
-                this.handleMessage(message);
-            } catch (error) {
-                console.error('Error processing message:', error);
-            }
-        });
+                // Render the screen if UI is available
+                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
+                    this.ui.screen.render();
+                }
+            });
 
-        this.ws.on('close', () => {
-            this.isConnected = false;
+            this.ws.on('error', (error) => {
+                console.error('WebSocket error:', error);
+                this.safeLog(`{red-fg}WebSocket error: ${error.message}{/red-fg}`);
+                
+                // Render the screen if UI is available
+                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
+                    this.ui.screen.render();
+                }
+            });
+        } catch (error) {
+            console.error('Error connecting to WebSocket:', error);
             this.connectionState = 'disconnected';
-            
-            // Only show disconnection message if we weren't expecting it
-            if (!this.restartInProgress) {
-                this.ui.logToConsole('{red-fg}Disconnected from bot server{/red-fg}');
-                this.handleReconnect();
-            }
-        });
-
-        this.ws.on('error', (error) => {
-            // Improved error handling with detailed error information
-            let errorMessage = 'WebSocket error';
-            
-            if (error.code) {
-                errorMessage += `: ${error.code}`;
-            }
-            
-            if (error.message) {
-                errorMessage += ` - ${error.message}`;
-            }
-            
-            if (error.errno) {
-                errorMessage += ` (errno: ${error.errno})`;
-            }
-            
-            if (error.address) {
-                errorMessage += ` - Address: ${error.address}:${error.port || '8080'}`;
-            }
-            
-            // Log detailed error to console box
-            this.ui.logToConsole(`{red-fg}${errorMessage}{/red-fg}`);
-            
-            // Also log to standard console for debugging
-            console.error('WebSocket error:', error);
-        });
-
-        this.ws.on('ping', () => {
-            this.ws.pong();
-        });
+            this.handleReconnect();
+        }
     }
 
     handleReconnect() {
-        if (this.reconnectAttempts < this.maxReconnectAttempts && !this.restartInProgress) {
-            this.reconnectAttempts++;
-            const message = `{yellow-fg}Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}{/yellow-fg}`;
-            this.ui.logToConsole(message);
-            
-            // Add exponential backoff with jitter
-            const baseDelay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
-            const jitter = Math.random() * 0.3 * baseDelay;
-            const delay = baseDelay + jitter;
-            
-            setTimeout(() => this.connect(), delay);
-        } else if (!this.restartInProgress) {
-            const message = '{red-fg}Max reconnection attempts reached. Please restart the application.{/red-fg}';
-            this.ui.logToConsole(message);
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
         }
+        
+        this.reconnectAttempts++;
+        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelay);
+        
+        this.safeLog(`{yellow-fg}Attempting to reconnect in ${Math.round(delay / 1000)} seconds (attempt ${this.reconnectAttempts})...{/yellow-fg}`);
+        
+        this.reconnectTimer = setTimeout(() => {
+            this.safeLog('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
+            this.connect();
+        }, delay);
     }
 
     handleMessage(message) {
@@ -404,9 +409,11 @@ class BotClient extends EventEmitter {
         }
     }
 
-    // Add a method to initialize Fedora integration later if needed
+    // Method to initialize Fedora integration when UI is ready
     initializeFedora() {
+        const fedora = require('./fedora');
         if (this.ui && typeof this.ui.logToConsole === 'function' && !fedora.isEnabled) {
+            console.log('UI is now ready, initializing Fedora integration');
             fedora.initialize(this, this.ui);
         }
     }

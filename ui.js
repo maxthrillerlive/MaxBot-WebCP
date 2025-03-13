@@ -2,10 +2,13 @@ const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 
 class BotUI {
-    constructor(client) {
-        this.client = client;
+    constructor() {
+        // Make blessed available to other modules
         this.blessed = blessed;
-        this.setupScreen();
+        this.contrib = contrib;
+        
+        // Flag to track initialization
+        this.initialized = false;
     }
 
     setupScreen() {
@@ -267,42 +270,41 @@ class BotUI {
 
         // Initial render
         this.screen.render();
+
+        // Mark as initialized
+        this.initialized = true;
+        
+        // Return this for chaining
+        return this;
     }
 
-    // Unified method to log all messages to console
+    // Add a method to check if UI is initialized
+    isInitialized() {
+        return this.initialized;
+    }
+
+    // Make logToConsole safer
     logToConsole(message) {
-        if (!message || message.trim() === '') return;
-        if (!this.consoleBox) return;
-
-        const timestamp = new Date().toLocaleTimeString();
-        
-        // Check if message already has color formatting
-        const hasFormatting = message.includes('{') && message.includes('}');
-        
-        // Add timestamp to all messages
-        let formattedMessage = `{gray-fg}[${timestamp}]{/gray-fg} `;
-        
-        // If message already has formatting, just append it
-        if (hasFormatting) {
-            formattedMessage += message;
-        } else {
-            // Format based on message type
-            if (message.includes('Connected to bot server')) {
-                formattedMessage += `{green-fg}${message}{/green-fg}`;
-            } else if (message.includes('Error:') || message.includes('error:') || message.includes('WebSocket error')) {
-                formattedMessage += `{red-fg}${message}{/red-fg}`;
-            } else if (message.includes('Reconnecting')) {
-                formattedMessage += `{yellow-fg}${message}{/yellow-fg}`;
-            } else if (message.includes('Command sent:')) {
-                formattedMessage += `{cyan-fg}${message}{/cyan-fg}`;
-            } else {
-                formattedMessage += message;
-            }
+        if (!this.consoleBox) {
+            console.log('Console box not initialized, logging to stdout:', message.replace(/\{[^}]+\}/g, ''));
+            return;
         }
-
-        // Log to console box
-        this.consoleBox.log(formattedMessage);
-        this.screen.render();
+        
+        try {
+            // Get current content
+            const content = this.consoleBox.getContent();
+            
+            // Add new message
+            this.consoleBox.setContent(content + '\n' + message);
+            
+            // Scroll to bottom
+            this.consoleBox.setScrollPerc(100);
+            
+            // Render screen
+            this.screen.render();
+        } catch (error) {
+            console.error('Error logging to console:', error);
+        }
     }
 
     // Handle chat messages - send to chat panel
