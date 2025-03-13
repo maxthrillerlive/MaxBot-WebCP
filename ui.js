@@ -255,6 +255,8 @@ class BotUI {
     // Update status display
     updateStatus(status) {
         try {
+            console.log('updateStatus called with:', JSON.stringify(status));
+            
             if (!this.statusBox) {
                 console.log('Status box not initialized');
                 return;
@@ -271,6 +273,7 @@ class BotUI {
             );
             
             this.screen.render();
+            console.log('Status display updated');
         } catch (error) {
             console.error('Error updating status:', error);
         }
@@ -279,6 +282,8 @@ class BotUI {
     // Update command list
     updateCommands(commands) {
         try {
+            console.log('updateCommands called with', commands ? commands.length : 0, 'commands');
+            
             if (!this.commandBox) {
                 console.log('Command box not initialized');
                 return;
@@ -287,6 +292,7 @@ class BotUI {
             if (!commands || commands.length === 0) {
                 this.commandBox.setItems(['No commands available']);
                 this.screen.render();
+                console.log('Command list updated: No commands available');
                 return;
             }
             
@@ -297,6 +303,7 @@ class BotUI {
             
             this.commandBox.setItems(items);
             this.screen.render();
+            console.log('Command list updated with', items.length, 'items');
         } catch (error) {
             console.error('Error updating commands:', error);
         }

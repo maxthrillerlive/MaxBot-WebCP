@@ -83,6 +83,11 @@ class BotClient extends EventEmitter {
                 if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
                     setTimeout(() => this.ui.screen.render(), 100);
                 }
+                
+                // Set up periodic status requests
+                this.statusInterval = setInterval(() => {
+                    this.requestStatus();
+                }, 5000); // Request status every 5 seconds
             });
 
             this.ws.on('message', (data) => {
@@ -259,7 +264,19 @@ class BotClient extends EventEmitter {
     }
 
     requestStatus() {
-        this.send({ type: 'GET_STATUS' });
+        if (this.isConnected) {
+            console.log('Requesting status update from server');
+            try {
+                this.ws.send(JSON.stringify({
+                    type: 'get-status',
+                    data: {}
+                }));
+            } catch (error) {
+                console.error('Error requesting status:', error);
+            }
+        } else {
+            console.log('Cannot request status: not connected');
+        }
     }
 
     requestCommands() {
@@ -422,10 +439,12 @@ class BotClient extends EventEmitter {
     }
 
     handleStatusUpdate(status) {
+        console.log('Received status update:', JSON.stringify(status));
         this.botStatus = status;
         
         // Update the UI if available
         if (this.ui && typeof this.ui.updateStatus === 'function') {
+            console.log('Updating UI status display');
             this.ui.updateStatus(status);
         } else {
             console.log('Status update received but UI not ready:', JSON.stringify(status));
@@ -433,7 +452,10 @@ class BotClient extends EventEmitter {
         
         // Update commands if available
         if (status.commands && this.ui && typeof this.ui.updateCommands === 'function') {
+            console.log('Updating UI commands list with', status.commands.length, 'commands');
             this.ui.updateCommands(status.commands);
+        } else if (!status.commands) {
+            console.log('No commands in status update');
         }
     }
 }
