@@ -41,29 +41,39 @@ class BotClient extends EventEmitter {
     }
 
     connect() {
-        // Hardcode the WebSocket URL to the correct IP address
-        const wsUrl = 'ws://192.168.1.122:8080';
+        const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
         console.log('Connecting to WebSocket server at:', wsUrl);
         
         // Don't try to connect if we're already connecting
         if (this.connectionState === 'connecting') return;
         
         this.connectionState = 'connecting';
-        this.safeLog('{yellow-fg}Connecting to bot server...{/yellow-fg}');
         
         try {
+            // Close existing connection if any
+            if (this.ws) {
+                try {
+                    this.ws.terminate();
+                } catch (e) {
+                    // Ignore errors when terminating
+                }
+                this.ws = null;
+            }
+            
+            // Create new connection
             this.ws = new WebSocket(wsUrl);
-
+            
             // Set a connection timeout
             const connectionTimeout = setTimeout(() => {
                 if (this.connectionState === 'connecting') {
+                    console.log('Connection attempt timed out');
                     this.ws.terminate();
                     this.connectionState = 'disconnected';
-                    this.safeLog('{red-fg}Connection attempt timed out{/red-fg}');
                     this.handleReconnect();
                 }
-            }, 5000);
-
+            }, 10000); // 10 second timeout
+            
+            // Set up event handlers
             this.ws.on('open', () => {
                 clearTimeout(connectionTimeout);
                 this.isConnected = true;
@@ -71,51 +81,35 @@ class BotClient extends EventEmitter {
                 this.reconnectAttempts = 0;
                 this.reconnectDelay = 1000;
                 
-                // Set a default status immediately upon connection
+                console.log('Connected to WebSocket server');
+                
+                // Set initial status
                 this.botStatus = {
                     connected: true,
                     channel: 'Connecting...',
                     uptime: 0
                 };
                 
-                // Update the UI with the default status
+                // Update UI
                 if (this.ui && typeof this.ui.updateStatus === 'function') {
-                    console.log('Setting initial status after connection');
                     this.ui.updateStatus(this.botStatus);
                 }
                 
-                this.safeLog('{green-fg}Connected to bot server{/green-fg}');
-                
-                // Force a render to ensure UI is displayed
-                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                    setTimeout(() => this.ui.screen.render(), 100);
-                }
-                
-                // Set up periodic status requests
-                this.statusInterval = setInterval(() => {
-                    this.requestStatus();
-                }, 5000); // Request status every 5 seconds
-
-                // Set a default status if we don't receive one
-                setTimeout(() => {
-                    if (!this.botStatus.connected) {
-                        console.log('No status received, setting default status');
-                        const defaultStatus = {
-                            connected: true,
-                            channel: 'Unknown',
-                            uptime: 0,
-                            commands: []
-                        };
-                        this.handleStatusUpdate(defaultStatus);
+                // Set up ping interval to keep connection alive
+                this.pingInterval = setInterval(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        try {
+                            // Send a ping message to keep the connection alive
+                            this.ws.send(JSON.stringify({ type: 'ping' }));
+                            console.log('Sent ping to server');
+                        } catch (error) {
+                            console.error('Error sending ping:', error);
+                        }
                     }
-                }, 3000);
-
-                // Force a status update after a short delay
-                setTimeout(() => {
-                    this.forceStatusUpdate();
-                }, 1000);
+                }, 30000); // Send ping every 30 seconds
             });
-
+            
+            // Handle messages
             this.ws.on('message', (data) => {
                 try {
                     const rawMessage = data.toString();
@@ -230,6 +224,15 @@ class BotClient extends EventEmitter {
                         }
                     }
                     
+                    // Also check for pong responses
+                    try {
+                        if (message.type === 'pong') {
+                            console.log('Received pong from server');
+                        }
+                    } catch (e) {
+                        // Ignore parsing errors
+                    }
+                    
                     // Render the screen if UI is available
                     if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
                         this.ui.screen.render();
@@ -238,42 +241,42 @@ class BotClient extends EventEmitter {
                     console.error('Error processing message:', error);
                 }
             });
-
+            
+            // Handle connection close
             this.ws.on('close', () => {
                 clearTimeout(connectionTimeout);
-                this.isConnected = false;
-                this.connectionState = 'disconnected';
-                this.safeLog('{red-fg}Disconnected from bot server{/red-fg}');
                 
-                // Update status to show disconnected
-                this.botStatus.connected = false;
-                this.updateStatusDisplay();
-                
-                // Don't attempt to reconnect if we're shutting down
-                if (!this.isShuttingDown) {
-                    this.handleReconnect();
+                // Clear intervals
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
                 }
                 
-                // Render the screen if UI is available
-                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                    this.ui.screen.render();
-                }
-                
-                // Clear the status interval
                 if (this.statusInterval) {
                     clearInterval(this.statusInterval);
                     this.statusInterval = null;
                 }
-            });
-
-            this.ws.on('error', (error) => {
-                console.error('WebSocket error:', error);
-                this.safeLog(`{red-fg}WebSocket error: ${error.message}{/red-fg}`);
                 
-                // Render the screen if UI is available
-                if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                    this.ui.screen.render();
+                this.isConnected = false;
+                this.connectionState = 'disconnected';
+                
+                console.log('Disconnected from WebSocket server');
+                
+                // Update status to show disconnected
+                this.botStatus.connected = false;
+                if (this.ui && typeof this.ui.updateStatus === 'function') {
+                    this.ui.updateStatus(this.botStatus);
                 }
+                
+                // Attempt to reconnect
+                this.handleReconnect();
+            });
+            
+            // Handle errors
+            this.ws.on('error', (error) => {
+                console.error('WebSocket error:', error.message);
+                
+                // Don't attempt to reconnect here, let the close event handle it
             });
         } catch (error) {
             console.error('Error connecting to WebSocket:', error);
