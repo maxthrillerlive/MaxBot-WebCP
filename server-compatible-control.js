@@ -1816,7 +1816,16 @@ app.get('/', (req, res) => {
                 }
               })
               .then(function(response) {
-                return response.json();
+                // Check if the response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                  return response.json();
+                } else {
+                  // If not JSON, handle as text
+                  return response.text().then(text => {
+                    throw new Error('Received non-JSON response: ' + text.substring(0, 100) + '...');
+                  });
+                }
               })
               .then(function(data) {
                 console.log('Start response:', data);
