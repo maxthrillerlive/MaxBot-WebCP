@@ -31,9 +31,9 @@ class BotUI {
             });
             
             // Set key bindings
-            this.screen.key(['escape', 'q', 'C-c'], () => {
-                this.exit();
-                return process.exit(0);
+            this.screen.key(['escape', 'q', 'Q', 'C-c', 'x', 'X'], () => {
+                console.log('Exit key pressed');
+                process.exit(0); // Force immediate exit
             });
             
             // Create the grid layout
@@ -107,18 +107,21 @@ class BotUI {
             
             // Create the admin box
             this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' Admin Panel ',
+                label: ' Exit Application ',
                 tags: true,
-                content: '{center}Press Enter to select an option{/center}\n\n' +
-                         '{center}[Exit Control Panel]{/center}',
+                content: '{center}{bold}Click here or press Q to exit{/bold}{/center}',
                 border: {
                     type: 'line',
-                    fg: 'cyan'
+                    fg: 'red'
                 },
                 style: {
                     fg: 'white',
+                    bg: 'red',
                     border: {
-                        fg: 'cyan'
+                        fg: 'red'
+                    },
+                    hover: {
+                        bg: 'dark-red'
                     }
                 },
                 mouse: true,
@@ -126,50 +129,8 @@ class BotUI {
                 clickable: true
             });
             
-            // Add click handler for the exit option
-            this.adminBox.on('click', (data) => {
-                // Check if the click is on the exit option (roughly line 3)
-                if (data.y === 3) {
-                    console.log('Exit option clicked');
-                    this.confirmExit();
-                }
-            });
-            
-            // Add a method to handle exit confirmation
-            this.confirmExit = () => {
-                const dialog = blessed.question({
-                    parent: this.screen,
-                    border: 'line',
-                    height: 'shrink',
-                    width: 'half',
-                    top: 'center',
-                    left: 'center',
-                    label: ' Confirm Exit ',
-                    tags: true,
-                    content: 'Are you sure you want to exit?',
-                    style: {
-                        fg: 'white',
-                        border: {
-                            fg: 'red'
-                        }
-                    }
-                });
-                
-                dialog.on('submit', (value) => {
-                    if (value) {
-                        console.log('Exit confirmed, shutting down');
-                        this.exit();
-                        process.exit(0);
-                    } else {
-                        console.log('Exit cancelled');
-                        this.screen.render();
-                    }
-                });
-                
-                this.screen.append(dialog);
-                dialog.focus();
-                this.screen.render();
-            };
+            // Focus the admin box by default
+            this.adminBox.focus();
             
             // Mark as initialized
             this.initialized = true;
