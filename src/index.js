@@ -43,12 +43,37 @@ function setupEventHandlers(ui, client) {
   // Add any other event handlers here
 }
 
-// Error handling for uncaught exceptions
+// Add more error handling
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  if (ui && ui.isInitialized()) {
-    ui.logToConsole(`Error: ${error.message}`);
-  }
+    console.error('Uncaught exception:', error);
+    // Try to log to UI if possible
+    try {
+        if (global.ui && global.ui.isInitialized()) {
+            global.ui.logToConsole(`Uncaught exception: ${error.message}`);
+        }
+    } catch (e) {
+        // Ignore errors in error handling
+    }
+    
+    // Force exit after uncaught exceptions
+    console.log('Exiting due to uncaught exception');
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    // Try to log to UI if possible
+    try {
+        if (global.ui && global.ui.isInitialized()) {
+            global.ui.logToConsole(`Unhandled rejection: ${reason}`);
+        }
+    } catch (e) {
+        // Ignore errors in error handling
+    }
+    
+    // Force exit after unhandled rejections
+    console.log('Exiting due to unhandled rejection');
+    process.exit(1);
 });
 
 // Override console methods to redirect to our UI
@@ -114,14 +139,6 @@ function setupConsoleOverride(client) {
 
 // Start the client with console override
 const originalConsole = setupConsoleOverride(client);
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-    if (client && client.ui) {
-        client.ui.logToConsole(`{red-fg}UNHANDLED REJECTION:{/red-fg} ${reason}`);
-    }
-    console.error('Unhandled Rejection:', reason);
-});
 
 // Create a PID file to store the current process ID
 const createPidFile = () => {

@@ -65,13 +65,37 @@ class BotClient extends EventEmitter {
         
         console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
+        // Set a connection timeout
+        const connectionTimeout = setTimeout(() => {
+            console.log('WebSocket connection timeout after 5 seconds');
+            if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+                console.log('Closing failed connection attempt');
+                try {
+                    this.ws.close();
+                } catch (e) {
+                    console.log('Error closing WebSocket:', e.message);
+                }
+                this.ws = null;
+                
+                // Don't try to reconnect, just log the error
+                console.log('Connection failed, not attempting to reconnect');
+                
+                // Update UI if available
+                if (this.ui && this.ui.isInitialized()) {
+                    this.ui.logToConsole('Failed to connect to MaxBot server (timeout)');
+                    this.ui.updateStatus({ connected: false });
+                }
+            }
+        }, 5000); // 5 second timeout
+        
         try {
             this.ws = new WebSocket(serverUrl);
             console.log('Connection initiated');
-            
-            this.ws.on('open', () => {
+
+        this.ws.on('open', () => {
                 console.log('Connected to WebSocket server');
-                this.reconnectAttempts = 0;
+                clearTimeout(connectionTimeout);
+            this.reconnectAttempts = 0;
                 
                 // Request initial status
                 this.sendMessage({ type: 'getStatus' });
@@ -83,11 +107,11 @@ class BotClient extends EventEmitter {
                 if (this.ui && this.ui.isInitialized()) {
                     this.ui.logToConsole('Connected to MaxBot server');
                 }
-            });
-            
-            this.ws.on('message', (data) => {
-                try {
-                    const message = JSON.parse(data);
+        });
+
+        this.ws.on('message', (data) => {
+            try {
+                const message = JSON.parse(data);
                     
                     if (message.type === 'status') {
                         if (this.ui && this.ui.isInitialized()) {
@@ -114,10 +138,10 @@ class BotClient extends EventEmitter {
                 console.error('WebSocket error:', error.message);
                 if (this.ui && this.ui.isInitialized()) {
                     this.ui.logToConsole(`WebSocket error: ${error.message}`);
-                }
-            });
-            
-            this.ws.on('close', () => {
+            }
+        });
+
+        this.ws.on('close', () => {
                 console.log('Disconnected from WebSocket server');
                 
                 if (this.ui && this.ui.isInitialized()) {
@@ -130,6 +154,9 @@ class BotClient extends EventEmitter {
             });
         } catch (error) {
             console.error('Error creating WebSocket connection:', error);
+            clearTimeout(connectionTimeout);
+            
+            // Update UI if available
             if (this.ui && this.ui.isInitialized()) {
                 this.ui.logToConsole(`Error creating WebSocket connection: ${error.message}`);
             }
@@ -140,7 +167,7 @@ class BotClient extends EventEmitter {
     }
     
     scheduleReconnect() {
-        this.reconnectAttempts++;
+            this.reconnectAttempts++;
         
         if (this.reconnectAttempts <= this.maxReconnectAttempts) {
             const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
@@ -202,16 +229,16 @@ class BotClient extends EventEmitter {
 
     handleMessage(message) {
         try {
-            switch (message.type) {
-                case 'STATUS':
+        switch (message.type) {
+            case 'STATUS':
                     // Add commands to status data if available
                     if (this.commands) {
                         message.data.commands = this.commands;
                     }
                     this.lastStatus = message.data;
-                    this.ui.updateStatus(message.data);
-                    break;
-                case 'COMMANDS':
+                this.ui.updateStatus(message.data);
+                break;
+            case 'COMMANDS':
                     // Store commands for status updates
                     this.commands = message.data;
                     this.ui.updateStatus({
@@ -219,23 +246,23 @@ class BotClient extends EventEmitter {
                         commands: message.data
                     });
                     this.ui.updateCommandControl(message.data);
-                    break;
-                case 'COMMAND_ENABLED':
+                break;
+            case 'COMMAND_ENABLED':
                     this.ui.logToConsole(`Command enabled: ${message.command}`);
-                    this.requestCommands();
-                    break;
-                case 'COMMAND_DISABLED':
+                this.requestCommands();
+                break;
+            case 'COMMAND_DISABLED':
                     this.ui.logToConsole(`Command disabled: ${message.command}`);
-                    this.requestCommands();
-                    break;
+                this.requestCommands();
+                break;
                 case 'COMMAND_RESULT':
                     this.ui.logToConsole(`Command ${message.command} ${message.success ? 'succeeded' : 'failed'}`);
-                    break;
+                break;
                 case 'CHAT_MESSAGE':
                     // Format and send to chat panel
                     const chatMsg = `info: [${message.data.channel}] <${message.data.username}>: ${message.data.message}`;
                     this.ui.processChatMessage(chatMsg);
-                    break;
+                break;
                 case 'CONNECTION_STATE':
                     if (message.state === 'restarting') {
                         this.restartInProgress = true;
@@ -244,10 +271,10 @@ class BotClient extends EventEmitter {
                         this.ui.updateConnectionState(message.state);
                     }
                     this.ui.logToConsole(`Bot ${message.state}`);
-                    break;
+                break;
                 case 'ERROR':
                     this.ui.logToConsole(`Error: ${message.error}`);
-                    break;
+                break;
                 default:
                     this.ui.logToConsole(`Unknown message type: ${message.type}`);
             }
