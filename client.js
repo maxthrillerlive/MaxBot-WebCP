@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const BotUI = require('./ui');
 const EventEmitter = require('events');
 const fedora = require('./fedora');
+const config = require('./config');
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_BASE = 2000;
@@ -52,7 +53,7 @@ class BotClient extends EventEmitter {
             return;
         }
         
-        const serverUrl = 'ws://192.168.1.122:8080';
+        const serverUrl = config.websocket.url;
         console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
         try {
