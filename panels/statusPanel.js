@@ -1,4 +1,3 @@
-// Update the StatusPanel class with a more direct approach to uptime
 const blessed = require('blessed');
 
 class StatusPanel {
