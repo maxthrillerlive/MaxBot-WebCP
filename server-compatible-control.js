@@ -542,18 +542,17 @@ app.post('/api/chat', (req, res) => {
                           appState.stats.botChannels[0] : 
                           process.env.CHANNEL_NAME || '#maxthriller');
     
-    // Use EXECUTE_COMMAND type with a special prefix "say:" to indicate this is a chat message
-    // This will be interpreted by the bot as a command to say something in the channel
-    const commandMsg = {
-      type: 'EXECUTE_COMMAND',
-      command: `say ${message}`,  // Add "say" prefix to indicate this is a chat message
+    // Use CHAT_COMMAND type which is recognized by index.js
+    const chatMsg = {
+      type: 'CHAT_COMMAND',
+      message: message,
       channel: targetChannel,
       client_id: clientId,
       timestamp: Date.now()
     };
     
     addLog(`Sending message to channel: ${targetChannel}`);
-    ws.send(JSON.stringify(commandMsg));
+    ws.send(JSON.stringify(chatMsg));
     appState.stats.messagesSent++;
     appState.stats.chatMessagesSent++;
     addLog(`Sent chat message: ${message}`);
