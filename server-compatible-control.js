@@ -117,46 +117,45 @@ function connectToWebSocket() {
       appState.wsStatus = 'Connected';
       appState.reconnectAttempts = 0;
       
-      // Send registration message
-        try {
-        const registerMsg = {
-          type: 'register',
-            client_id: clientId,
-          client_type: 'tui',
+      // Send GET_STATUS instead of register
+      try {
+        const statusRequest = {
+          type: 'GET_STATUS',  // This is recognized by index.js
+          client_id: clientId,
           timestamp: Date.now()
-          };
-          
-        ws.send(JSON.stringify(registerMsg));
-        addLog('Sent registration message');
-        } catch (e) {
-        addLog(`Error sending registration: ${e.message}`);
-        }
+        };
+        
+        ws.send(JSON.stringify(statusRequest));
+        addLog('Sent status request');
+      } catch (e) {
+        addLog(`Error sending status request: ${e.message}`);
+      }
       
       // Set up ping interval to keep connection alive
       clearInterval(pingInterval);
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
-            // Send ping message
-            const pingMsg = {
-              type: 'ping',
+            // Send GET_STATUS message instead of ping
+            const statusRequest = {
+              type: 'GET_STATUS',
               client_id: clientId,
               timestamp: Date.now()
             };
             
-            ws.send(JSON.stringify(pingMsg));
+            ws.send(JSON.stringify(statusRequest));
             appState.lastPingTime = Date.now();
-            addLog('Sent ping message');
-              } catch (e) {
-            addLog(`Error sending ping: ${e.message}`);
+            addLog('Sent periodic status request');
+          } catch (e) {
+            addLog(`Error sending status request: ${e.message}`);
             clearInterval(pingInterval);
           }
         } else {
           // WebSocket is not open, clear the interval
-          addLog('WebSocket not open, clearing ping interval');
+          addLog('WebSocket not open, clearing status interval');
           clearInterval(pingInterval);
         }
-      }, 25000); // Send ping every 25 seconds (server checks every 30)
+      }, 25000); // Send status request every 25 seconds
     });
     
     ws.on('message', (data) => {
@@ -368,8 +367,9 @@ app.post('/api/chat', (req, res) => {
   }
   
   try {
+    // Use CHAT_COMMAND for server.js or EXECUTE_COMMAND for index.js
     const chatMsg = {
-      type: 'CHAT_COMMAND',
+      type: 'CHAT_COMMAND',  // This works with server.js
       message,
       channel: channel || process.env.CHANNEL_NAME || '#channel',
       client_id: clientId,
@@ -390,26 +390,10 @@ app.post('/api/exit', (req, res) => {
   addLog('Exit requested via API');
   res.json({ success: true, message: 'Exiting...' });
   
-  // Send exit command to server if connected
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try {
-      const exitMsg = {
-            type: 'disconnect',
-            client_id: clientId,
-        timestamp: Date.now()
-          };
-      
-      ws.send(JSON.stringify(exitMsg));
-          addLog('Sent disconnect message');
-            } catch (e) {
-      addLog(`Error sending disconnect message: ${e.message}`);
-    }
-  }
-  
   // Schedule cleanup and exit
-      setTimeout(() => {
+  setTimeout(() => {
     cleanup();
-        process.exit(0);
+    process.exit(0);
   }, 500);
 });
 
@@ -580,13 +564,13 @@ app.get('/', (req, res) => {
         .main-content {
           flex-direction: column;
         }
-            }
-          </style>
-        </head>
-        <body>
+      }
+    </style>
+  </head>
+  <body>
     <div class="container">
       <div class="header">
-          <h1>MaxBot TUI Control Panel</h1>
+        <h1>MaxBot TUI Control Panel</h1>
         <div class="status">
           <div id="status-indicator" class="status-indicator disconnected"></div>
           <span id="status-text">Disconnected</span>
@@ -601,8 +585,8 @@ app.get('/', (req, res) => {
             <input type="text" id="chat-input" placeholder="Type a message...">
             <button id="send-chat">Send</button>
           </div>
-          </div>
-          
+        </div>
+        
         <div class="panel">
           <div class="panel-header">Logs</div>
           <div id="logs-container" class="logs-container"></div>
@@ -614,8 +598,8 @@ app.get('/', (req, res) => {
           </div>
         </div>
       </div>
-          </div>
-          
+    </div>
+    
     <script>
       // Elements
       const statusIndicator = document.getElementById('status-indicator');
@@ -851,13 +835,7 @@ function cleanup() {
   if (ws) {
     try {
       if (ws.readyState === WebSocket.OPEN) {
-        const disconnectMsg = {
-          type: 'disconnect',
-          client_id: clientId,
-          timestamp: Date.now()
-        };
-        
-        ws.send(JSON.stringify(disconnectMsg));
+        // Don't send a disconnect message, just close the connection
         ws.close();
       }
     } catch (e) {
