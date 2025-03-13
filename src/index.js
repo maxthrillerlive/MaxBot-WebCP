@@ -2,8 +2,10 @@
 
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
-const BotUI = require('./ui');
-const BotClient = require('./client');
+
+// Update the require paths to use the correct locations
+const BotUI = require('../ui.js');
+const BotClient = require('../client.js');
 
 console.log('Starting MaxBot TUI...');
 
