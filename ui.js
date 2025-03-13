@@ -12,10 +12,14 @@ class BotUI {
         this.initialized = false;
         this.client = null;
         
-        // Add a safety timeout to force exit after 10 seconds
+        console.log('Setting up guaranteed exit in 10 seconds');
+        
+        // Use a more direct approach to ensure exit
+        // This will bypass any potential issues with the normal exit process
         this.exitTimeout = setTimeout(() => {
-            console.log('Safety timeout reached, forcing exit');
-            process.exit(0);
+            console.log('Forcing application termination after 10 seconds');
+            // Use process.kill with SIGKILL to force immediate termination
+            process.kill(process.pid, 'SIGKILL');
         }, 10 * 1000); // 10 seconds
     }
 
@@ -24,38 +28,11 @@ class BotUI {
             console.log('Setting up TUI screen...');
             
             // Create the screen
-        this.screen = blessed.screen({
-            smartCSR: true,
+            this.screen = blessed.screen({
+                smartCSR: true,
                 title: 'MaxBot TUI',
                 dockBorders: true,
-                fullUnicode: true,
-                sendFocus: true,
-                useBCE: true
-            });
-            
-            // Set key bindings - try ALL possible keys
-            this.screen.key(['escape', 'q', 'Q', 'C-c', 'x', 'X', 'e', 'E', 'C-d', 'C-x', 'C-q', 'C-z', 'f10', 'f4'], () => {
-                console.log('Exit key pressed');
-                process.exit(0);
-            });
-            
-            // Try to catch ANY key press
-            this.screen.on('keypress', (ch, key) => {
-                console.log('Key pressed:', key ? key.name : ch);
-                // If user presses any key 5 times in a row, exit
-                if (!this.keyPressCount) this.keyPressCount = 0;
-                this.keyPressCount++;
-                
-                if (this.keyPressCount >= 5) {
-                    console.log('Multiple key presses detected, exiting');
-                    process.exit(0);
-                }
-                
-                // Reset count after 2 seconds
-                clearTimeout(this.keyResetTimeout);
-                this.keyResetTimeout = setTimeout(() => {
-                    this.keyPressCount = 0;
-                }, 2000);
+                fullUnicode: true
             });
             
             // Create the grid layout
@@ -66,7 +43,6 @@ class BotUI {
             });
             
             // Replace the StatusPanel with a simple box
-            // this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
             this.statusBox = this.grid.set(0, 0, 3, 12, blessed.box, {
                 label: ' Bot Status (Disabled) ',
                 tags: true,
@@ -116,15 +92,13 @@ class BotUI {
                 }
             });
             
-            // Create a simple text box with clear exit instructions
+            // Create a simple text box with auto-exit information
             this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' EMERGENCY EXIT INSTRUCTIONS ',
+                label: ' AUTO-EXIT COUNTDOWN ',
                 tags: true,
-                content: '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
-                         '{center}1. Press ANY key 5 times quickly{/center}\n' +
-                         '{center}2. Wait 10 seconds for auto-exit{/center}\n' +
-                         '{center}3. In PuTTY, close the window{/center}\n' +
-                         '{center}4. On server, use kill command{/center}',
+                content: '{center}{bold}APPLICATION WILL FORCE EXIT{/bold}{/center}\n\n' +
+                         '{center}This application will automatically terminate{/center}\n' +
+                         '{center}in 10 seconds{/center}',
                 border: {
                     type: 'line',
                     fg: 'red'
@@ -144,7 +118,7 @@ class BotUI {
                 left: 0,
                 right: 0,
                 height: 1,
-                content: ' EMERGENCY EXIT: Press ANY key 5 times quickly or wait 10 seconds for auto-exit',
+                content: ' AUTO-EXIT: Application will force terminate in 10 seconds',
                 style: {
                     fg: 'white',
                     bg: 'red'
@@ -158,12 +132,7 @@ class BotUI {
             console.log('Rendering TUI screen...');
             this.screen.render();
             
-            // Set up a render interval to ensure the screen is updated
-            setInterval(() => {
-                this.screen.render();
-            }, 1000);
-            
-            // Add a countdown timer for the auto-exit
+            // Set up a countdown
             let remainingSeconds = 10;
             this.countdownInterval = setInterval(() => {
                 remainingSeconds--;
@@ -171,13 +140,17 @@ class BotUI {
                     clearInterval(this.countdownInterval);
                 } else {
                     this.adminBox.setContent(
-                        '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
-                        '{center}1. Press ANY key 5 times quickly{/center}\n' +
-                        `{center}2. Auto-exit in ${remainingSeconds} seconds{/center}\n` +
-                        '{center}3. In PuTTY, close the window{/center}\n' +
-                        '{center}4. On server, use kill command{/center}'
+                        '{center}{bold}APPLICATION WILL FORCE EXIT{/bold}{/center}\n\n' +
+                        '{center}This application will automatically terminate{/center}\n' +
+                        `{center}in ${remainingSeconds} seconds{/center}`
                     );
-                this.screen.render();
+                    
+                    // Update the bottom message too
+                    this.screen.children[this.screen.children.length - 1].setContent(
+                        ` AUTO-EXIT: Application will force terminate in ${remainingSeconds} seconds`
+                    );
+                    
+                    this.screen.render();
                 }
             }, 1000); // Update every second
             
@@ -216,17 +189,17 @@ class BotUI {
     showConfirmDialog(message) {
         return new Promise((resolve) => {
             const dialog = blessed.question({
-            parent: this.screen,
+                parent: this.screen,
                 border: 'line',
                 height: 'shrink',
                 width: 'half',
-            top: 'center',
-            left: 'center',
+                top: 'center',
+                left: 'center',
                 label: ' Confirm ',
                 tags: true,
-            keys: true,
-            vi: true,
-            mouse: true,
+                keys: true,
+                vi: true,
+                mouse: true,
                 content: message,
                 style: {
                     fg: 'white',
@@ -268,7 +241,6 @@ class BotUI {
         console.log('Exiting MaxBot TUI...');
         // Clear any timeouts and intervals
         clearTimeout(this.exitTimeout);
-        clearTimeout(this.keyResetTimeout);
         clearInterval(this.countdownInterval);
     }
 }
