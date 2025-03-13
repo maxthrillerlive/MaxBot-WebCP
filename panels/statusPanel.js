@@ -28,12 +28,28 @@ class StatusPanel {
     try {
       console.log('StatusPanel.updateStatus called with:', JSON.stringify(status));
       
-      // Very simple content update
-      this.panel.setContent(
-        `Status: ${status.connected ? 'Connected' : 'Disconnected'}\n` +
-        `Channel: ${status.channel || 'Unknown'}\n` +
-        `Uptime: ${status.uptime || 0}s`
-      );
+      // Format the status information
+      const connectedStatus = status.connected ? '{green-fg}Connected{/green-fg}' : '{red-fg}Disconnected{/red-fg}';
+      const channel = status.channel || 'Unknown';
+      const uptime = status.uptime ? `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m ${status.uptime % 60}s` : '0s';
+      
+      // Build the content
+      let content = `{bold}Connection:{/bold} ${connectedStatus}\n` +
+                    `{bold}Channel:{/bold} ${channel}\n` +
+                    `{bold}Uptime:{/bold} ${uptime}`;
+      
+      // Add username if available
+      if (status.username) {
+        content += `\n{bold}Username:{/bold} ${status.username}`;
+      }
+      
+      // Add process ID if available
+      if (status.processId) {
+        content += `\n{bold}Process ID:{/bold} ${status.processId}`;
+      }
+      
+      // Update the panel content
+      this.panel.setContent(content);
       
       console.log('Status panel content updated');
     } catch (error) {
