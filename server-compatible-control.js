@@ -925,6 +925,65 @@ app.get('/', (req, res) => {
               <span class="stat-label">Commands Executed:</span>
               <span class="stat-value" id="cp-commands-executed">-</span>
             </div>
+            <div class="stat-item">
+              <span class="stat-label">Errors:</span>
+              <span class="stat-value" id="cp-errors">-</span>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <h3>System Info</h3>
+            <div class="stat-item">
+              <span class="stat-label">Platform:</span>
+              <span class="stat-value" id="sys-platform">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">CPUs:</span>
+              <span class="stat-value" id="sys-cpus">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Memory:</span>
+              <span class="stat-value" id="sys-memory">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Uptime:</span>
+              <span class="stat-value" id="sys-uptime">-</span>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <h3>Connection History</h3>
+            <div class="connection-history" id="connection-history">
+              <!-- Connection history items will be added here -->
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="chat-tab">
+        <div class="main-content">
+          <div class="panel">
+            <div class="panel-header">Chat</div>
+            <div id="chat-container" class="chat-container"></div>
+            <div class="input-container">
+              <input type="text" id="chat-input" placeholder="Type a message...">
+              <button id="send-chat">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="logs-tab">
+        <div class="main-content">
+          <div class="panel">
+            <div class="panel-header">Logs</div>
+            <div id="logs-container" class="logs-container"></div>
+            <div class="commands-container" id="commands-container"></div>
+            <div class="input-container">
+              <input type="text" id="command-input" placeholder="Type a command...">
+              <button id="send-command">Execute</button>
+              <button id="exit-button" class="danger">Exit</button>
+            </div>
           </div>
         </div>
       </div>
@@ -942,6 +1001,24 @@ app.get('/', (req, res) => {
       const sendChatButton = document.getElementById('send-chat');
       const sendCommandButton = document.getElementById('send-command');
       const exitButton = document.getElementById('exit-button');
+      
+      // Tab switching
+      const tabs = document.querySelectorAll('.tab');
+      const tabContents = document.querySelectorAll('.tab-content');
+      
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabId = tab.getAttribute('data-tab');
+          
+          // Remove active class from all tabs and contents
+          tabs.forEach(t => t.classList.remove('active'));
+          tabContents.forEach(c => c.classList.remove('active'));
+          
+          // Add active class to selected tab and content
+          tab.classList.add('active');
+          document.getElementById(tabId + '-tab').classList.add('active');
+        });
+      });
       
       // Update status
       function updateStatus() {
@@ -1042,6 +1119,91 @@ app.get('/', (req, res) => {
           });
       }
       
+      // Update statistics
+      function updateStats() {
+        fetch('/api/stats')
+          .then(response => response.json())
+          .then(stats => {
+            // Bot stats
+            document.getElementById('bot-username').textContent = stats.bot.username || '-';
+            document.getElementById('bot-channels').textContent = stats.bot.channels ? stats.bot.channels.join(', ') : '-';
+            document.getElementById('bot-uptime').textContent = stats.bot.uptimeFormatted || '-';
+            document.getElementById('bot-commands').textContent = document.querySelectorAll('.command-button').length || '-';
+            
+            // Memory usage
+            if (stats.bot.memoryUsage && stats.bot.memoryUsage.heapUsed && stats.bot.memoryUsage.heapTotal) {
+              const heapUsed = Math.round(stats.bot.memoryUsage.heapUsed / 1024 / 1024 * 100) / 100;
+              const heapTotal = Math.round(stats.bot.memoryUsage.heapTotal / 1024 / 1024 * 100) / 100;
+              const percentage = Math.round((heapUsed / heapTotal) * 100);
+              
+              document.getElementById('bot-memory').textContent = \`\${heapUsed} MB / \${heapTotal} MB (\${percentage}%)\`;
+              document.getElementById('memory-bar').style.width = \`\${percentage}%\`;
+            } else {
+              document.getElementById('bot-memory').textContent = '-';
+              document.getElementById('memory-bar').style.width = '0%';
+            }
+            
+            // Control panel stats
+            document.getElementById('cp-uptime').textContent = stats.controlPanel.uptimeFormatted || '-';
+            document.getElementById('cp-messages-received').textContent = stats.controlPanel.messagesReceived || '0';
+            document.getElementById('cp-messages-sent').textContent = stats.controlPanel.messagesSent || '0';
+            document.getElementById('cp-reconnections').textContent = stats.controlPanel.reconnections || '0';
+            document.getElementById('cp-commands-executed').textContent = stats.controlPanel.commandsExecuted || '0';
+            document.getElementById('cp-errors').textContent = stats.controlPanel.errors || '0';
+            
+            // System stats
+            document.getElementById('sys-platform').textContent = \`\${stats.system.platform} (\${stats.system.arch})\`;
+            document.getElementById('sys-cpus').textContent = stats.system.cpus || '-';
+            
+            if (stats.system.totalMemory && stats.system.freeMemory) {
+              const totalMemory = Math.round(stats.system.totalMemory / 1024 / 1024 / 1024 * 100) / 100;
+              const freeMemory = Math.round(stats.system.freeMemory / 1024 / 1024 / 1024 * 100) / 100;
+              const usedMemory = Math.round((totalMemory - freeMemory) * 100) / 100;
+              const percentage = Math.round((usedMemory / totalMemory) * 100);
+              
+              document.getElementById('sys-memory').textContent = \`\${usedMemory} GB / \${totalMemory} GB (\${percentage}%)\`;
+            } else {
+              document.getElementById('sys-memory').textContent = '-';
+            }
+            
+            if (stats.system.uptime) {
+              const days = Math.floor(stats.system.uptime / 86400);
+              const hours = Math.floor((stats.system.uptime % 86400) / 3600);
+              const minutes = Math.floor((stats.system.uptime % 3600) / 60);
+              
+              document.getElementById('sys-uptime').textContent = \`\${days}d \${hours}h \${minutes}m\`;
+            } else {
+              document.getElementById('sys-uptime').textContent = '-';
+            }
+            
+            // Connection history
+            if (stats.controlPanel.connectionHistory && stats.controlPanel.connectionHistory.length > 0) {
+              const historyContainer = document.getElementById('connection-history');
+              historyContainer.innerHTML = '';
+              
+              stats.controlPanel.connectionHistory.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                const time = new Date(item.time).toLocaleTimeString();
+                const stateClass = item.state.toLowerCase().includes('connected') ? 'connected' : 
+                                  item.state.toLowerCase().includes('error') ? 'error' : 'disconnected';
+                
+                historyItem.innerHTML = \`
+                  <span class="history-time">\${time}</span>
+                  <span class="history-state \${stateClass}">\${item.state}</span>
+                  \${item.reason ? \`<span class="history-reason">(\${item.reason})</span>\` : ''}
+                \`;
+                
+                historyContainer.appendChild(historyItem);
+              });
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching stats:', error);
+          });
+      }
+      
       // Send chat message
       function sendChatMessage() {
         const message = chatInput.value.trim();
@@ -1134,12 +1296,14 @@ app.get('/', (req, res) => {
       updateLogs();
       updateChat();
       updateCommands();
+      updateStats();
       
       // Set up polling
       setInterval(updateStatus, 5000);
       setInterval(updateLogs, 2000);
       setInterval(updateChat, 2000);
       setInterval(updateCommands, 10000);
+      setInterval(updateStats, 5000);
     </script>
   </body>
   </html>
