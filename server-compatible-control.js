@@ -286,6 +286,14 @@ function connectToWebSocket() {
               addLog(`Updated commands list (${appState.commands.length} commands)`);
             }
             
+            // Log the status for debugging
+            console.log('Bot status updated:', {
+              username: appState.stats.botUsername,
+              pid: appState.stats.botPid,
+              status: appState.wsStatus,
+              uptime: appState.stats.botUptime
+            });
+            
             return;
           }
           
@@ -322,6 +330,14 @@ function connectToWebSocket() {
               // Store the entire status object for reference
               appState.stats.botStatus = message.data;
               
+              // Log the status for debugging
+              console.log('Bot status updated:', {
+                username: appState.stats.botUsername,
+                pid: appState.stats.botPid,
+                status: appState.wsStatus,
+                uptime: appState.stats.botUptime
+              });
+              
               // Store commands if available
               if (message.data.commands) {
                 appState.commands = message.data.commands;
@@ -354,6 +370,11 @@ function connectToWebSocket() {
           case 'CONNECTION_STATE':
             const state = message.state || 'unknown';
             addLog(`Received connection state: ${state}`);
+            
+            // Update the connection state
+            appState.wsStatus = state;
+            console.log('Connection state updated:', state);
+            
             trackConnectionState(`Server: ${state}`);
             break;
             
@@ -1682,73 +1703,30 @@ app.get('/', (req, res) => {
       setInterval(updateCommands, 10000);
       setInterval(updateStats, 5000);
       
-      // Admin Panel Functionality
-      const restartBtn = document.getElementById('restart-bot');
-      const shutdownBtn = document.getElementById('shutdown-bot');
-      const startBtn = document.getElementById('start-bot');
-      const adminBotStatus = document.getElementById('admin-bot-status');
-      const adminBotUptime = document.getElementById('admin-bot-uptime');
-      const adminBotPid = document.getElementById('admin-bot-pid');
-      const adminConnectionHistory = document.getElementById('admin-connection-history');
-      
-      // Modal elements
-      const confirmationModal = document.getElementById('confirmation-modal');
-      const modalTitle = document.getElementById('modal-title');
-      const modalMessage = document.getElementById('modal-message');
-      const modalCancel = document.getElementById('modal-cancel');
-      const modalConfirm = document.getElementById('modal-confirm');
-      const closeModal = document.querySelector('.close-modal');
-      
-      // Show modal with custom message
-      function showConfirmationModal(title, message, confirmAction) {
-        modalTitle.textContent = title;
-        modalMessage.textContent = message;
-        
-        // Set up confirm action
-        modalConfirm.onclick = () => {
-          confirmAction();
-          confirmationModal.style.display = 'none';
-        };
-        
-        // Show the modal
-        confirmationModal.style.display = 'block';
-      }
-      
-      // Close modal when clicking cancel or X
-      modalCancel.onclick = () => {
-        confirmationModal.style.display = 'none';
-      };
-      
-      closeModal.onclick = () => {
-        confirmationModal.style.display = 'none';
-      };
-      
-      // Close modal when clicking outside
-      window.onclick = (event) => {
-        if (event.target === confirmationModal) {
-          confirmationModal.style.display = 'none';
-        }
-      };
-      
-      // Update admin panel status
+      // Add a specific function to update the admin panel
       function updateAdminPanel() {
+        console.log('Updating admin panel...');
         fetch('/api/stats')
           .then(response => response.json())
           .then(data => {
+            console.log('Admin panel data:', data);
+            
+            // Get admin panel elements
+            const adminBotStatus = document.getElementById('admin-bot-status');
+            const adminBotUptime = document.getElementById('admin-bot-uptime');
+            const adminBotPid = document.getElementById('admin-bot-pid');
+            const adminConnectionHistory = document.getElementById('admin-connection-history');
+            
+            if (!adminBotStatus || !adminBotUptime || !adminBotPid) {
+              console.error('Admin panel elements not found');
+              return;
+            }
+            
             // Update bot status
             if (data.bot) {
               // Update status display
               adminBotStatus.textContent = data.connection.status || data.bot.status || 'Unknown';
-              
-              // Set status color
-              adminBotStatus.className = 'status-value';
-              if (adminBotStatus.textContent === 'Connected') {
-                adminBotStatus.classList.add('status-connected');
-              } else if (adminBotStatus.textContent === 'Error') {
-                adminBotStatus.classList.add('status-error');
-              } else {
-                adminBotStatus.classList.add('status-disconnected');
-              }
+              console.log('Setting status to:', adminBotStatus.textContent);
               
               // Update uptime
               if (data.bot.uptimeFormatted) {
@@ -1774,8 +1752,8 @@ app.get('/', (req, res) => {
               adminBotPid.textContent = '-';
             }
             
-            // Update connection history
-            if (data.controlPanel && data.controlPanel.connectionHistory) {
+            // Update connection history if the element exists
+            if (adminConnectionHistory && data.controlPanel && data.controlPanel.connectionHistory) {
               adminConnectionHistory.innerHTML = '';
               
               data.controlPanel.connectionHistory.forEach(entry => {
@@ -1796,6 +1774,10 @@ app.get('/', (req, res) => {
             console.error('Error updating admin panel:', error);
           });
       }
+      
+      // Call updateAdminPanel initially and set up polling
+      updateAdminPanel();
+      setInterval(updateAdminPanel, 2000);
       
       // Replace the existing button handlers with these direct WebSocket implementations
       window.addEventListener('load', function() {
