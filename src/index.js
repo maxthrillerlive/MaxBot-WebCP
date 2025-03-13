@@ -1,5 +1,35 @@
-require('dotenv').config();
-const BotClient = require('../client');
+#!/usr/bin/env node
+
+const blessed = require('blessed');
+const contrib = require('blessed-contrib');
+const BotUI = require('./ui');
+const BotClient = require('./client');
+
+console.log('Starting MaxBot TUI...');
+
+// Create UI first and make sure it's properly initialized
+const ui = new BotUI();
+console.log('UI instance created:', ui ? 'Success' : 'Failed');
+
+// Setup the screen
+ui.setupScreen();
+console.log('Screen setup complete');
+
+// Create client with UI - pass the ui object explicitly
+const client = new BotClient(ui);
+console.log('Client created with UI');
+
+// Set client reference in UI
+ui.setClient(client);
+console.log('Client reference set in UI');
+
+// Connect to the bot server
+client.connect();
+console.log('Connection initiated');
+
+// Force render the screen
+ui.screen.render();
+console.log('Screen rendered');
 
 // Override console methods to redirect to our UI
 function setupConsoleOverride(client) {
@@ -63,7 +93,6 @@ function setupConsoleOverride(client) {
 }
 
 // Start the client with console override
-const client = new BotClient();
 const originalConsole = setupConsoleOverride(client);
 
 // Handle uncaught exceptions
