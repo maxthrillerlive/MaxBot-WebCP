@@ -22,6 +22,8 @@ class StatusPanel {
 
   updateStatus(status) {
     try {
+      console.log('StatusPanel.updateStatus called with:', JSON.stringify(status));
+      
       const connectedStatus = status.connected ? '{green-fg}Connected{/green-fg}' : '{red-fg}Disconnected{/red-fg}';
       const channel = status.channel || 'None';
       const uptime = status.uptime ? `${Math.floor(status.uptime / 60)}m ${status.uptime % 60}s` : '0s';
@@ -31,6 +33,8 @@ class StatusPanel {
         `{bold}Channel:{/bold} ${channel}\n` +
         `{bold}Uptime:{/bold} ${uptime}`
       );
+      
+      console.log('Status panel updated');
     } catch (error) {
       console.error('Error updating status panel:', error);
     }

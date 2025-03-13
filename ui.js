@@ -1,9 +1,6 @@
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 const StatusPanel = require('./panels/statusPanel');
-const CommandsPanel = require('./panels/commandsPanel');
-const ConsolePanel = require('./panels/consolePanel');
-const AdminPanel = require('./panels/adminPanel');
 
 class BotUI {
     constructor() {
@@ -40,16 +37,57 @@ class BotUI {
                 screen: this.screen
             });
             
-            console.log('Creating UI panels...');
+            // Create only the status panel
+            this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
             
-            // Create panels
-            this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 6);
-            this.commandsPanel = new CommandsPanel(this.grid, 0, 6, 3, 6);
-            this.consolePanel = new ConsolePanel(this.grid, 3, 0, 3, 6);
+            // Keep the existing panels for compatibility, but don't create new ones
+            this.commandBox = this.grid.set(3, 0, 3, 12, blessed.box, {
+                label: ' Commands (Disabled) ',
+                tags: true,
+                content: '{center}Commands panel is disabled{/center}',
+                border: {
+                    type: 'line',
+                    fg: 'gray'
+                },
+                style: {
+                    fg: 'gray',
+                    border: {
+                        fg: 'gray'
+                    }
+                }
+            });
             
-            // Initial log message
-            this.logToConsole('{cyan-fg}MaxBot TUI started{/cyan-fg}');
-            this.logToConsole('{yellow-fg}Connecting to bot server...{/yellow-fg}');
+            this.consoleBox = this.grid.set(6, 0, 3, 12, blessed.box, {
+                label: ' Console (Disabled) ',
+                tags: true,
+                content: '{center}Console panel is disabled{/center}',
+                border: {
+                    type: 'line',
+                    fg: 'gray'
+                },
+                style: {
+                    fg: 'gray',
+                    border: {
+                        fg: 'gray'
+                    }
+                }
+            });
+            
+            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
+                label: ' Admin Panel (Disabled) ',
+                tags: true,
+                content: '{center}Admin panel is disabled{/center}',
+                border: {
+                    type: 'line',
+                    fg: 'gray'
+                },
+                style: {
+                    fg: 'gray',
+                    border: {
+                        fg: 'gray'
+                    }
+                }
+            });
             
             // Mark as initialized
             this.initialized = true;
@@ -60,7 +98,6 @@ class BotUI {
             
             console.log('TUI setup complete');
             
-            // Return this for chaining
             return this;
         } catch (error) {
             console.error('Error setting up UI:', error);
@@ -71,25 +108,13 @@ class BotUI {
     // Set the client reference
     setClient(client) {
         this.client = client;
-        
-        // Create admin panel now that we have a client
-        this.adminPanel = new AdminPanel(this.grid, 3, 6, 3, 6, this.client, this);
-        
         this.screen.render();
     }
 
     // Make logToConsole safer
     logToConsole(message) {
-        try {
-            if (this.consolePanel) {
-                this.consolePanel.log(message);
-                this.screen.render();
-            } else {
-                console.log('Console panel not initialized, logging to stdout:', message.replace(/\{[^}]+\}/g, ''));
-            }
-        } catch (error) {
-            console.error('Error logging to console:', error);
-        }
+        // Just log to stdout since console panel is disabled
+        console.log(message.replace(/\{[^}]+\}/g, ''));
     }
 
     // Show a confirmation dialog
@@ -128,18 +153,20 @@ class BotUI {
 
     // Update status display
     updateStatus(status) {
+        console.log('UI.updateStatus called with:', JSON.stringify(status));
+        
         if (this.statusPanel) {
             this.statusPanel.updateStatus(status);
             this.screen.render();
+        } else {
+            console.log('Status panel not initialized');
         }
     }
 
     // Update command list
     updateCommands(commands) {
-        if (this.commandsPanel) {
-            this.commandsPanel.updateCommands(commands);
-            this.screen.render();
-        }
+        // Do nothing since commands panel is disabled
+        console.log('Commands update ignored - panel is disabled');
     }
 
     // Check if UI is initialized
