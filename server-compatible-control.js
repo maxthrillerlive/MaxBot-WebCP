@@ -673,6 +673,7 @@ app.get('/api/admin/start-bot', (req, res) => {
   console.log('Start bot endpoint called');
   
   try {
+    const { execFile } = require('child_process');
     const scriptPath = path.join(__dirname, 'start-bot.js');
     
     console.log('Executing start script:', scriptPath);
@@ -687,12 +688,26 @@ app.get('/api/admin/start-bot', (req, res) => {
       
       console.log('Start script output:', stdout);
       
-      // Add to logs
-      const timestamp = new Date().toISOString();
-      appState.logs.push({
-        time: timestamp,
-        message: 'Bot start initiated via external script'
-      });
+      // Make sure we're using the global appState
+      if (typeof appState !== 'undefined') {
+        // Add to logs
+        const timestamp = new Date().toISOString();
+        appState.logs.push({
+          time: timestamp,
+          message: 'Bot start initiated via external script'
+        });
+        
+        // Add to connection history
+        if (appState.stats && appState.stats.connectionHistory) {
+          appState.stats.connectionHistory.push({
+            time: Date.now(),
+            state: 'Start Requested',
+            reason: 'User initiated start via external script'
+          });
+        }
+      } else {
+        console.warn('Warning: appState is not defined, cannot update logs');
+      }
       
       return res.status(200).send('Bot start initiated');
     });
@@ -1852,24 +1867,30 @@ app.get('/', (req, res) => {
                 if (response.ok) {
                   alert('Bot start initiated. Check logs for details.');
                   
-                  // Add to logs
+                  // Add to logs locally
                   const timestamp = new Date().toISOString();
-                  appState.logs.push({
-                    time: timestamp,
-                    message: 'Bot start initiated via external script'
-                  });
+                  if (window.appState && window.appState.logs) {
+                    window.appState.logs.push({
+                      time: timestamp,
+                      message: 'Bot start initiated via external script'
+                    });
+                  }
                   
-                  // Add to connection history
-                  appState.stats.connectionHistory.push({
-                    time: Date.now(),
-                    state: 'Start Requested',
-                    reason: 'User initiated start via external script'
-                  });
+                  // Add to connection history locally
+                  if (window.appState && window.appState.stats && window.appState.stats.connectionHistory) {
+                    window.appState.stats.connectionHistory.push({
+                      time: Date.now(),
+                      state: 'Start Requested',
+                      reason: 'User initiated start via external script'
+                    });
+                  }
                   
                   // Refresh the admin panel after a short delay
                   setTimeout(updateAdminPanel, 2000);
                 } else {
-                  alert('Error starting bot. Check server logs for details.');
+                  response.text().then(text => {
+                    alert('Error starting bot: ' + text);
+                  });
                 }
               })
               .catch(function(error) {
