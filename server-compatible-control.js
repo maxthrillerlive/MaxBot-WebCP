@@ -1530,9 +1530,9 @@ app.get('/', (req, res) => {
       setInterval(updateStats, 5000);
       
       // Admin Panel Functionality
-      const restartBotButton = document.getElementById('restart-bot');
-      const shutdownBotButton = document.getElementById('shutdown-bot');
-      const startBotButton = document.getElementById('start-bot');
+      const restartBtn = document.getElementById('restart-bot');
+      const shutdownBtn = document.getElementById('shutdown-bot');
+      const startBtn = document.getElementById('start-bot');
       const adminBotStatus = document.getElementById('admin-bot-status');
       const adminBotUptime = document.getElementById('admin-bot-uptime');
       const adminBotPid = document.getElementById('admin-bot-pid');
@@ -1635,13 +1635,13 @@ app.get('/', (req, res) => {
             
             // Enable/disable buttons based on status
             if (stats.connection && stats.connection.status === 'Connected') {
-              startBotButton.disabled = true;
-              restartBotButton.disabled = false;
-              shutdownBotButton.disabled = false;
+              startBtn.disabled = true;
+              restartBtn.disabled = false;
+              shutdownBtn.disabled = false;
             } else {
-              startBotButton.disabled = false;
-              restartBotButton.disabled = true;
-              shutdownBotButton.disabled = true;
+              startBtn.disabled = false;
+              restartBtn.disabled = true;
+              shutdownBtn.disabled = true;
             }
           })
           .catch(error => {
@@ -1652,102 +1652,81 @@ app.get('/', (req, res) => {
       // First, make sure we have direct references to the buttons
       document.addEventListener('DOMContentLoaded', function() {
         // Get button references after the DOM is fully loaded
-        const restartBotButton = document.getElementById('restart-bot');
-        const shutdownBotButton = document.getElementById('shutdown-bot');
-        const startBotButton = document.getElementById('start-bot');
+        const restartBtn = document.getElementById('restart-bot');
+        const shutdownBtn = document.getElementById('shutdown-bot');
+        const startBtn = document.getElementById('start-bot');
         
-        if (restartBotButton) {
-          restartBotButton.onclick = function() {
+        console.log('Button elements:', { 
+          restart: restartBtn, 
+          shutdown: shutdownBtn, 
+          start: startBtn 
+        });
+        
+        if (restartBtn) {
+          restartBtn.onclick = function() {
             console.log('Restart button clicked');
-            if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
-              // Send the restart command directly via WebSocket
+            if (confirm('Are you sure you want to restart the bot?')) {
               if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                  const restartMsg = {
-                    type: 'RESTART_BOT',
-                    client_id: clientId,
-                    timestamp: Date.now()
-                  };
-                  
-                  ws.send(JSON.stringify(restartMsg));
-                  addLog('Sent restart command to bot');
-                  alert('Restart command sent to bot');
-                } catch (error) {
-                  console.error('Error sending restart command:', error);
-                  addLog('Error sending restart command: ' + error.message);
-                  alert('Error sending restart command: ' + error.message);
-                }
+                const msg = {
+                  type: 'RESTART_BOT',
+                  client_id: clientId,
+                  timestamp: Date.now()
+                };
+                ws.send(JSON.stringify(msg));
+                console.log('Restart command sent');
+                alert('Restart command sent');
               } else {
-                alert('WebSocket is not connected. Cannot send restart command.');
-                addLog('WebSocket is not connected. Cannot send restart command.');
+                console.error('WebSocket not connected');
+                alert('Cannot restart: WebSocket not connected');
               }
             }
           };
-        } else {
-          console.error('Restart button not found');
         }
         
-        if (shutdownBotButton) {
-          shutdownBotButton.onclick = function() {
+        if (shutdownBtn) {
+          shutdownBtn.onclick = function() {
             console.log('Shutdown button clicked');
-            if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
-              // Send the shutdown command directly via WebSocket
+            if (confirm('Are you sure you want to shut down the bot?')) {
               if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                  const shutdownMsg = {
-                    type: 'EXIT_BOT',
-                    client_id: clientId,
-                    timestamp: Date.now()
-                  };
-                  
-                  ws.send(JSON.stringify(shutdownMsg));
-                  addLog('Sent shutdown command to bot');
-                  alert('Shutdown command sent to bot');
-                } catch (error) {
-                  console.error('Error sending shutdown command:', error);
-                  addLog('Error sending shutdown command: ' + error.message);
-                  alert('Error sending shutdown command: ' + error.message);
-                }
+                const msg = {
+                  type: 'EXIT_BOT',
+                  client_id: clientId,
+                  timestamp: Date.now()
+                };
+                ws.send(JSON.stringify(msg));
+                console.log('Shutdown command sent');
+                alert('Shutdown command sent');
               } else {
-                alert('WebSocket is not connected. Cannot send shutdown command.');
-                addLog('WebSocket is not connected. Cannot send shutdown command.');
+                console.error('WebSocket not connected');
+                alert('Cannot shutdown: WebSocket not connected');
               }
             }
           };
-        } else {
-          console.error('Shutdown button not found');
         }
         
-        if (startBotButton) {
-          startBotButton.onclick = function() {
+        if (startBtn) {
+          startBtn.onclick = function() {
             console.log('Start button clicked');
             if (confirm('Are you sure you want to start the bot?')) {
-              // For starting the bot, we'll use a fetch request to a new endpoint
               fetch('/api/admin/start', {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
+                headers: { 'Content-Type': 'application/json' }
+              })
+              .then(res => res.json())
+              .then(data => {
+                console.log('Start response:', data);
+                if (data.success) {
+                  alert(`Bot started with PID: ${data.pid}`);
+                } else {
+                  alert(`Error: ${data.error || 'Unknown error'}`);
                 }
               })
-                .then(response => response.json())
-                .then(data => {
-                  if (data.success) {
-                    addLog('Bot start initiated');
-                    alert('Bot start initiated');
-                  } else {
-                    addLog('Error starting bot: ' + (data.error || 'Unknown error'));
-                    alert('Error starting bot: ' + (data.error || 'Unknown error'));
-                  }
-                })
-                .catch(error => {
-                  console.error('Error starting bot:', error);
-                  addLog('Error starting bot: ' + error.message);
-                  alert('Error starting bot: ' + error.message);
-                });
+              .catch(err => {
+                console.error('Start error:', err);
+                alert(`Error: ${err.message}`);
+              });
             }
           };
-        } else {
-          console.error('Start button not found');
         }
       });
       
@@ -1777,28 +1756,43 @@ app.get('/', (req, res) => {
           
           console.log('Started bot process with PID:', botProcess.pid);
           
-          // Use the global addLog function if it exists, otherwise just log to console
-          if (typeof addLog === 'function') {
-            addLog(`Started bot process with PID: ${botProcess.pid}`);
-          } else {
-            console.log(`Started bot process with PID: ${botProcess.pid}`);
+          // Add to logs array directly
+          const timestamp = new Date().toISOString();
+          if (Array.isArray(appState.logs)) {
+            appState.logs.push({
+              time: timestamp,
+              message: `Started bot process with PID: ${botProcess.pid}`
+            });
           }
           
-          // Track the connection state if the function exists
-          if (typeof trackConnectionState === 'function') {
-            trackConnectionState('Start Requested', 'User initiated start');
+          // Add to connection history directly
+          if (Array.isArray(appState.stats.connectionHistory)) {
+            appState.stats.connectionHistory.push({
+              time: Date.now(),
+              state: 'Start Requested',
+              reason: 'User initiated start'
+            });
+            
+            // Keep history to a reasonable size
+            if (appState.stats.connectionHistory.length > 100) {
+              appState.stats.connectionHistory.shift();
+            }
           }
           
           res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
         } catch (error) {
           console.error('Error starting bot:', error);
           
-          // Use the global addLog function if it exists
-          if (typeof addLog === 'function') {
-            addLog(`Error starting bot: ${error.message}`);
+          // Add error to logs array directly
+          const timestamp = new Date().toISOString();
+          if (Array.isArray(appState.logs)) {
+            appState.logs.push({
+              time: timestamp,
+              message: `Error starting bot: ${error.message}`
+            });
           }
           
-          // Increment errors if appState exists
+          // Increment errors counter directly
           if (appState && appState.stats) {
             appState.stats.errors++;
           }
