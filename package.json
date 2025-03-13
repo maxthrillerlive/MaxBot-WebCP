@@ -4,9 +4,10 @@
     "description": "Terminal User Interface for MaxBot - A Twitch Chat Bot",
     "main": "src/index.js",
     "scripts": {
-        "start": "node src/index.js",
-        "dev": "nodemon src/index.js",
-        "test": "jest"
+        "start": "node start-http-control.js",
+        "start:ui": "node src/index.js",
+        "start:http": "node server-compatible-control.js",
+        "force-exit": "node force-exit.js"
     },
     "dependencies": {
         "blessed": "^0.1.81",
