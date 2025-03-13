@@ -502,29 +502,31 @@ class BotClient extends EventEmitter {
     handleStatusUpdate(status) {
         console.log('Received status update:', JSON.stringify(status));
         
-        // Try to extract status information from whatever format we received
-        const updatedStatus = {
-            connected: status.connected || status.connectionStatus === 'connected' || false,
-            channel: status.channel || (status.channels && status.channels.length > 0 ? status.channels[0] : 'Unknown'),
-            uptime: status.uptime || 0,
-            commands: status.commands || []
-        };
+        // Check if we're getting the channel name from the server
+        if (status.channel === "Unknown" && status.channels && status.channels.length > 0) {
+            status.channel = status.channels[0];
+        }
         
-        this.botStatus = updatedStatus;
+        // If we have a connectionState field, use it to determine connected status
+        if (status.connectionState) {
+            status.connected = status.connectionState === "OPEN";
+        }
+        
+        this.botStatus = status;
         
         // Update the UI if available
         if (this.ui && typeof this.ui.updateStatus === 'function') {
             console.log('Updating UI status display');
-            this.ui.updateStatus(updatedStatus);
+            this.ui.updateStatus(status);
         } else {
-            console.log('Status update received but UI not ready:', JSON.stringify(updatedStatus));
+            console.log('Status update received but UI not ready:', JSON.stringify(status));
         }
         
         // Update commands if available
-        if (updatedStatus.commands && updatedStatus.commands.length > 0 && this.ui && typeof this.ui.updateCommands === 'function') {
-            console.log('Updating UI commands list with', updatedStatus.commands.length, 'commands');
-            this.ui.updateCommands(updatedStatus.commands);
-        } else if (!updatedStatus.commands || updatedStatus.commands.length === 0) {
+        if (status.commands && status.commands.length > 0 && this.ui && typeof this.ui.updateCommands === 'function') {
+            console.log('Updating UI commands list with', status.commands.length, 'commands');
+            this.ui.updateCommands(status.commands);
+        } else if (!status.commands || status.commands.length === 0) {
             console.log('No commands in status update');
         }
     }
