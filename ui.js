@@ -147,6 +147,33 @@ class BotUI {
             
             console.log('TUI setup complete');
             
+            // Update the admin box click handler to be more aggressive
+            this.adminBox.on('click', () => {
+                console.log('Admin box clicked, forcing exit');
+                // Force immediate exit with SIGKILL
+                try {
+                    process.kill(process.pid, 'SIGKILL');
+                } catch (e) {
+                    process.exit(1);
+                }
+            });
+            
+            // Add this to the setupScreen method right after creating the screen
+            // Add a global key handler that will force exit no matter what
+            process.stdin.on('keypress', (ch, key) => {
+                if (key && (key.name === 'q' || key.name === 'x' || key.name === 'escape' || 
+                    (key.ctrl && key.name === 'c'))) {
+                    console.log('Force exit key detected');
+                    process.exit(1);
+                }
+            });
+            
+            // Add a direct event listener to the admin box for key presses
+            this.adminBox.on('keypress', (ch, key) => {
+                console.log('Key pressed in admin box:', key ? key.name : ch);
+                process.exit(1);
+            });
+            
             return this;
         } catch (error) {
             console.error('Error setting up UI:', error);
