@@ -1,4 +1,4 @@
-// Update the StatusPanel class to fix uptime calculation
+// Update the StatusPanel class with a more direct approach to uptime
 const blessed = require('blessed');
 
 class StatusPanel {
@@ -20,28 +20,40 @@ class StatusPanel {
       }
     });
     
-    // Track start time for accurate uptime calculation
-    this.startTime = Date.now();
-    this.uptimeSeconds = 0;
+    // Initialize uptime counter
+    this.hours = 0;
+    this.minutes = 0;
+    this.seconds = 0;
     
-    // Set hardcoded status information
-    this.setHardcodedStatus();
+    // Set initial status
+    this.updateStatus();
     
-    // Update status every second to show it's working
-    this.updateInterval = setInterval(() => {
-      // Increment uptime counter
-      this.uptimeSeconds++;
-      this.setHardcodedStatus();
+    // Update uptime every second
+    this.timer = setInterval(() => {
+      // Increment seconds
+      this.seconds++;
+      
+      // Handle minute rollover
+      if (this.seconds >= 60) {
+        this.seconds = 0;
+        this.minutes++;
+      }
+      
+      // Handle hour rollover
+      if (this.minutes >= 60) {
+        this.minutes = 0;
+        this.hours++;
+      }
+      
+      // Update the display
+      this.updateStatus();
     }, 1000);
   }
   
-  setHardcodedStatus() {
+  updateStatus() {
     try {
-      // Calculate uptime display
-      const hours = Math.floor(this.uptimeSeconds / 3600);
-      const minutes = Math.floor((this.uptimeSeconds % 3600) / 60);
-      const seconds = this.uptimeSeconds % 60;
-      const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+      // Format uptime
+      const uptimeStr = `${this.hours}h ${this.minutes}m ${this.seconds}s`;
       
       // Get memory usage
       const memoryUsage = process.memoryUsage();
@@ -49,7 +61,7 @@ class StatusPanel {
       const heapTotal = Math.round(memoryUsage.heapTotal / 1024 / 1024);
       const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024);
       
-      // Set hardcoded content with reordered fields
+      // Set content
       this.panel.setContent(
         `{bold}Connection:{/bold} {green-fg}Connected{/green-fg}\n` +
         `{bold}Username:{/bold} Max2d2\n` +
@@ -65,19 +77,14 @@ class StatusPanel {
         this.panel.screen.render();
       }
     } catch (error) {
-      console.error('Error setting hardcoded status:', error);
+      console.error('Error updating status panel:', error);
     }
   }
   
-  updateStatus(status) {
-    // Ignore status updates from outside, use hardcoded values
-    console.log('Ignoring external status update:', JSON.stringify(status));
-  }
-  
   destroy() {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = null;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
     }
   }
 }
