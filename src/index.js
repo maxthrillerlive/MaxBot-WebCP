@@ -4,6 +4,7 @@ const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
 // Update the require paths to use the correct locations
 const BotUI = require('../ui');
@@ -73,6 +74,109 @@ const safetyTimeout = setTimeout(() => {
 let ui;
 let client;
 
+// Create a direct WebSocket connection to the server
+let ws = null;
+let pingInterval = null;
+
+// Connect to WebSocket server
+function connectToWebSocket() {
+    try {
+        // Get server URL from environment variables or use default
+        const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
+        const port = process.env.WEBSOCKET_PORT || '8080';
+        const serverUrl = `ws://${host}:${port}`;
+        
+        console.log(`Connecting to WebSocket server at: ${serverUrl}`);
+        
+        ws = new WebSocket(serverUrl);
+        
+        // Set up heartbeat mechanism
+        ws.on('open', () => {
+            console.log('Connected to WebSocket server');
+            
+            // Send registration message
+            const clientId = `MaxBot-TUI-${Math.floor(Math.random() * 10000)}`;
+            const registerMsg = {
+                type: 'register',
+                client_id: clientId,
+                client_type: 'tui',
+                timestamp: Date.now()
+            };
+            
+            ws.send(JSON.stringify(registerMsg));
+            console.log('Sent registration message');
+            
+            // Set up ping interval to keep connection alive
+            // This is important - the server expects clients to respond to ping frames
+            clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    // Send application-level ping
+                    const pingMsg = {
+                        type: 'ping',
+                        client_id: clientId,
+                        timestamp: Date.now()
+                    };
+                    
+                    ws.send(JSON.stringify(pingMsg));
+                    console.log('Sent ping message');
+                } else {
+                    clearInterval(pingInterval);
+                }
+            }, 25000); // Send ping every 25 seconds (server checks every 30)
+        });
+        
+        // Handle WebSocket-level ping
+        ws.on('ping', () => {
+            // Automatically respond with pong (ws library handles this)
+            console.log('Received WebSocket ping');
+        });
+        
+        ws.on('message', (data) => {
+            try {
+                console.log(`Received raw data: ${data.toString()}`);
+                const message = JSON.parse(data.toString());
+                
+                if (message.type) {
+                    console.log(`Received message of type: ${message.type}`);
+                    
+                    if (message.type === 'STATUS') {
+                        console.log('Received status update');
+                    } else if (message.type === 'pong') {
+                        console.log('Received pong response');
+                    }
+                } else {
+                    console.log('Received message without type');
+                }
+            } catch (error) {
+                console.error(`Error processing message: ${error.message}`);
+            }
+        });
+        
+        ws.on('close', (code, reason) => {
+            console.log(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reason || 'No reason provided'})`);
+            clearInterval(pingInterval);
+            
+            // Attempt to reconnect after a delay
+            setTimeout(() => {
+                if (ui && ui.screen) {
+                    console.log('Attempting to reconnect...');
+                    connectToWebSocket();
+                }
+            }, 1000);
+        });
+        
+        ws.on('error', (error) => {
+            console.error(`WebSocket error: ${error.message}`);
+        });
+        
+        return ws;
+    } catch (error) {
+        console.error(`Error creating WebSocket: ${error.message}`);
+        return null;
+    }
+}
+
 try {
     // Create and initialize the UI
     ui = new BotUI();
@@ -96,8 +200,8 @@ try {
     console.log('BotClient initialized, deferring Fedora integration');
     console.log('Client created with UI');
     
-    // Skip setting up event handlers
-    console.log('Skipping event handlers setup to avoid freezing');
+    // Connect to WebSocket server directly
+    connectToWebSocket();
     
     // Log success
     console.log('Application started successfully');
@@ -111,10 +215,18 @@ try {
         console.log('Exit key pressed');
         
         // Ensure WebSocket is closed before exiting
-        if (client && client.ws && client.ws.readyState === 1) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             console.log('Closing WebSocket connection...');
             try {
-                client.ws.close();
+                // Send a disconnect message
+                const disconnectMsg = {
+                    type: 'disconnect',
+                    client_id: 'MaxBot-TUI',
+                    timestamp: Date.now()
+                };
+                
+                ws.send(JSON.stringify(disconnectMsg));
+                ws.close();
             } catch (e) {
                 console.error('Error closing WebSocket:', e);
             }
@@ -133,10 +245,18 @@ try {
             console.log('Admin panel clicked, exiting...');
             
             // Ensure WebSocket is closed before exiting
-            if (client && client.ws && client.ws.readyState === 1) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 console.log('Closing WebSocket connection...');
                 try {
-                    client.ws.close();
+                    // Send a disconnect message
+                    const disconnectMsg = {
+                        type: 'disconnect',
+                        client_id: 'MaxBot-TUI',
+                        timestamp: Date.now()
+                    };
+                    
+                    ws.send(JSON.stringify(disconnectMsg));
+                    ws.close();
                 } catch (e) {
                     console.error('Error closing WebSocket:', e);
                 }
@@ -228,6 +348,7 @@ const exitCheck = setInterval(() => {
 // Clear the interval on exit
 process.on('exit', () => {
     clearInterval(exitCheck);
+    clearInterval(pingInterval);
     clearTimeout(safetyTimeout);
 });
 
