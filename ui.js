@@ -18,8 +18,8 @@ class BotUI {
             console.log('Setting up TUI screen...');
             
             // Create the screen
-            this.screen = blessed.screen({
-                smartCSR: true,
+        this.screen = blessed.screen({
+            smartCSR: true,
                 title: 'MaxBot TUI',
                 dockBorders: true,
                 fullUnicode: true
@@ -40,11 +40,6 @@ class BotUI {
             // Create only the status panel
             this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
             
-            // Directly set content to verify it works
-            if (this.statusPanel && this.statusPanel.panel) {
-                this.statusPanel.panel.setContent('DIRECT TEST: Panel is working');
-            }
-            
             // Keep the existing panels for compatibility, but don't create new ones
             this.commandBox = this.grid.set(3, 0, 3, 12, blessed.box, {
                 label: ' Commands (Disabled) ',
@@ -54,7 +49,7 @@ class BotUI {
                     type: 'line',
                     fg: 'gray'
                 },
-                style: {
+            style: {
                     fg: 'gray',
                     border: {
                         fg: 'gray'
@@ -94,25 +89,17 @@ class BotUI {
                 }
             });
             
-            // Test the status panel again after a delay
-            setTimeout(() => {
-                console.log('Testing status panel after delay');
-                if (this.statusPanel) {
-                    this.statusPanel.updateStatus({
-                        connected: true,
-                        channel: 'Test Channel',
-                        uptime: 123
-                    });
-                    this.screen.render();
-                }
-            }, 2000);
-            
             // Mark as initialized
             this.initialized = true;
             
             // Render the screen
             console.log('Rendering TUI screen...');
             this.screen.render();
+            
+            // Set up a render interval to ensure the screen is updated
+            setInterval(() => {
+        this.screen.render();
+            }, 1000);
             
             console.log('TUI setup complete');
             
@@ -175,7 +162,7 @@ class BotUI {
             
             this.screen.append(dialog);
             dialog.focus();
-            this.screen.render();
+                this.screen.render();
         });
     }
 
