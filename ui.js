@@ -114,7 +114,17 @@ class BotUI {
     // Make logToConsole safer
     logToConsole(message) {
         // Just log to stdout since console panel is disabled
-        console.log(message.replace(/\{[^}]+\}/g, ''));
+        try {
+            // Use a simple regex replacement to avoid potential recursion
+            let cleanMessage = message;
+            if (typeof message === 'string') {
+                // Remove blessed tags with a simple approach
+                cleanMessage = message.replace(/\{[^}]*\}/g, '');
+            }
+            console.log('LOG:', cleanMessage);
+        } catch (error) {
+            console.error('Error in logToConsole:', error);
+        }
     }
 
     // Show a confirmation dialog
