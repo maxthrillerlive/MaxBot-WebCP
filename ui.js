@@ -399,21 +399,33 @@ class BotUI {
                 content: `{center}${message}{/center}\n\n{center}Press Y to confirm, N or Esc to cancel{/center}`
             });
 
+            // Make sure the dialog is above other elements
+            dialog.setFront();
+            this.screen.render();
+
+            // Create a separate key handler for this dialog
+            const keyHandler = (ch, key) => {
+                if (key.name === 'y' || key.name === 'Y') {
+                    cleanup();
+                    resolve(true);
+                } else if (key.name === 'n' || key.name === 'N' || key.name === 'escape') {
+                    cleanup();
+                    resolve(false);
+                }
+            };
+
+            // Add the key handler
+            this.screen.on('keypress', keyHandler);
+
+            // Function to clean up the dialog
             const cleanup = () => {
+                this.screen.removeListener('keypress', keyHandler);
                 dialog.destroy();
                 this.screen.render();
             };
 
-            this.screen.key(['y', 'Y'], () => {
-                cleanup();
-                resolve(true);
-            });
-
-            this.screen.key(['escape', 'n', 'N'], () => {
-                cleanup();
-                resolve(false);
-            });
-
+            // Focus the dialog to ensure it receives input
+            dialog.focus();
             this.screen.render();
         });
     }
