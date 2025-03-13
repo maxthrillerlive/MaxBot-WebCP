@@ -12,15 +12,31 @@ class BotUI {
         this.initialized = false;
         this.client = null;
         
-        console.log('Setting up guaranteed exit in 10 seconds');
+        console.log('Setting up GUARANTEED exit in 10 seconds');
         
-        // Use a more direct approach to ensure exit
-        // This will bypass any potential issues with the normal exit process
-        this.exitTimeout = setTimeout(() => {
-            console.log('Forcing application termination after 10 seconds');
-            // Use process.kill with SIGKILL to force immediate termination
+        // Set multiple exit timers to ensure at least one works
+        setTimeout(() => {
+            console.log('Exit timer 1: Forcing exit with process.exit(1)');
+            process.exit(1);
+        }, 10000);
+        
+        setTimeout(() => {
+            console.log('Exit timer 2: Forcing exit with SIGTERM');
+            process.kill(process.pid, 'SIGTERM');
+        }, 10500);
+        
+        setTimeout(() => {
+            console.log('Exit timer 3: Forcing exit with SIGKILL');
             process.kill(process.pid, 'SIGKILL');
-        }, 10 * 1000); // 10 seconds
+        }, 11000);
+        
+        // Also set up a Node.js exit handler
+        process.on('exit', () => {
+            console.log('Process exit event triggered');
+        });
+        
+        // Log the PID for manual killing if needed
+        console.log(`Process ID: ${process.pid} - You can manually kill with: kill -9 ${process.pid}`);
     }
 
     setupScreen() {
@@ -94,11 +110,11 @@ class BotUI {
             
             // Create a simple text box with auto-exit information
             this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' AUTO-EXIT COUNTDOWN ',
+                label: ' FORCED EXIT IN 10 SECONDS ',
                 tags: true,
-                content: '{center}{bold}APPLICATION WILL FORCE EXIT{/bold}{/center}\n\n' +
-                         '{center}This application will automatically terminate{/center}\n' +
-                         '{center}in 10 seconds{/center}',
+                content: '{center}{bold}EMERGENCY AUTO-EXIT ACTIVE{/bold}{/center}\n\n' +
+                         '{center}This application will forcefully terminate{/center}\n' +
+                         '{center}in 10 seconds - NO COUNTDOWN DISPLAY{/center}',
                 border: {
                     type: 'line',
                     fg: 'red'
@@ -118,7 +134,7 @@ class BotUI {
                 left: 0,
                 right: 0,
                 height: 1,
-                content: ' AUTO-EXIT: Application will force terminate in 10 seconds',
+                content: ' EMERGENCY EXIT: Application will terminate in 10 seconds (fixed timer, no countdown)',
                 style: {
                     fg: 'white',
                     bg: 'red'
@@ -131,28 +147,6 @@ class BotUI {
             // Render the screen
             console.log('Rendering TUI screen...');
             this.screen.render();
-            
-            // Set up a countdown
-            let remainingSeconds = 10;
-            this.countdownInterval = setInterval(() => {
-                remainingSeconds--;
-                if (remainingSeconds <= 0) {
-                    clearInterval(this.countdownInterval);
-                } else {
-                    this.adminBox.setContent(
-                        '{center}{bold}APPLICATION WILL FORCE EXIT{/bold}{/center}\n\n' +
-                        '{center}This application will automatically terminate{/center}\n' +
-                        `{center}in ${remainingSeconds} seconds{/center}`
-                    );
-                    
-                    // Update the bottom message too
-                    this.screen.children[this.screen.children.length - 1].setContent(
-                        ` AUTO-EXIT: Application will force terminate in ${remainingSeconds} seconds`
-                    );
-                    
-                    this.screen.render();
-                }
-            }, 1000); // Update every second
             
             console.log('TUI setup complete');
             
@@ -239,9 +233,7 @@ class BotUI {
     // Add an exit method to clean up resources
     exit() {
         console.log('Exiting MaxBot TUI...');
-        // Clear any timeouts and intervals
-        clearTimeout(this.exitTimeout);
-        clearInterval(this.countdownInterval);
+        // No need to clear timeouts - we want them to fire
     }
 }
 
