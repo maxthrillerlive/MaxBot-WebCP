@@ -1651,86 +1651,74 @@ app.get('/', (req, res) => {
       
       // Restart bot
       restartBotButton.addEventListener('click', () => {
-        showConfirmationModal(
-          'Restart Bot',
-          'Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.',
-          () => {
-            fetch('/api/admin/restart', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
+        if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
+          fetch('/api/admin/restart', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                addLog('Bot restart initiated');
+              } else {
+                addLog('Error restarting bot: ' + (data.error || 'Unknown error'));
               }
             })
-              .then(response => response.json())
-              .then(data => {
-                if (data.success) {
-                  addLog('Bot restart initiated');
-                } else {
-                  addLog('Error restarting bot: ' + data.error);
-                }
-              })
-              .catch(error => {
-                console.error('Error restarting bot:', error);
-                addLog('Error restarting bot: ' + error.message);
-              });
-          }
-        );
+            .catch(error => {
+              console.error('Error restarting bot:', error);
+              addLog('Error restarting bot: ' + error.message);
+            });
+        }
       });
       
       // Shutdown bot
       shutdownBotButton.addEventListener('click', () => {
-        showConfirmationModal(
-          'Shutdown Bot',
-          'Are you sure you want to shut down the bot? You will need to manually restart it.',
-          () => {
-            fetch('/api/admin/shutdown', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
+        if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
+          fetch('/api/admin/shutdown', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                addLog('Bot shutdown initiated');
+              } else {
+                addLog('Error shutting down bot: ' + (data.error || 'Unknown error'));
               }
             })
-              .then(response => response.json())
-              .then(data => {
-                if (data.success) {
-                  addLog('Bot shutdown initiated');
-                } else {
-                  addLog('Error shutting down bot: ' + data.error);
-                }
-              })
-              .catch(error => {
-                console.error('Error shutting down bot:', error);
-                addLog('Error shutting down bot: ' + error.message);
-              });
-          }
-        );
+            .catch(error => {
+              console.error('Error shutting down bot:', error);
+              addLog('Error shutting down bot: ' + error.message);
+            });
+        }
       });
       
       // Start bot
       startBotButton.addEventListener('click', () => {
-        showConfirmationModal(
-          'Start Bot',
-          'Are you sure you want to start the bot?',
-          () => {
-            fetch('/api/admin/start', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
+        if (confirm('Are you sure you want to start the bot?')) {
+          fetch('/api/admin/start', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                addLog('Bot start initiated');
+              } else {
+                addLog('Error starting bot: ' + (data.error || 'Unknown error'));
               }
             })
-              .then(response => response.json())
-              .then(data => {
-                if (data.success) {
-                  addLog('Bot start initiated');
-                } else {
-                  addLog('Error starting bot: ' + data.error);
-                }
-              })
-              .catch(error => {
-                console.error('Error starting bot:', error);
-                addLog('Error starting bot: ' + error.message);
-              });
-          }
-        );
+            .catch(error => {
+              console.error('Error starting bot:', error);
+              addLog('Error starting bot: ' + error.message);
+            });
+        }
       });
       
       // Add admin panel update to polling
@@ -1802,8 +1790,6 @@ app.post('/api/admin/shutdown', (req, res) => {
 app.post('/api/admin/start', (req, res) => {
   try {
     // This is a placeholder - actual implementation would depend on how you want to start the bot
-    // For example, you might use child_process.spawn to start a new bot process
-    
     const { spawn } = require('child_process');
     const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
     
