@@ -105,6 +105,22 @@ function addChatMessage(username, message, channel, badges = {}) {
 // Track connection state changes
 function trackConnectionState(state, reason = '') {
   const timestamp = Date.now();
+  
+  // Check if this is a duplicate of the last entry
+  const lastEntry = appState.stats.connectionHistory.length > 0 ? 
+    appState.stats.connectionHistory[appState.stats.connectionHistory.length - 1] : null;
+    
+  if (lastEntry && lastEntry.state === state) {
+    // Update the timestamp of the existing entry instead of adding a new one
+    lastEntry.time = timestamp;
+    if (reason && !lastEntry.reason) {
+      lastEntry.reason = reason;
+    }
+    console.log('Updated existing connection history entry:', lastEntry);
+    return;
+  }
+  
+  // Add to connection history
   appState.stats.connectionHistory.push({
     time: timestamp,
     state: state,
@@ -129,7 +145,7 @@ let pingInterval = null;
 function connectToWebSocket() {
   try {
     // Get server URL from environment variables or use default
-    const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
+    const host = process.env.WEBSOCKET_HOST || 'localhost';
     const port = process.env.WEBSOCKET_PORT || '8080';
     const serverUrl = `ws://${host}:${port}`;
     
@@ -375,7 +391,8 @@ function connectToWebSocket() {
             appState.wsStatus = state;
             console.log('Connection state updated:', state);
             
-            trackConnectionState(`Server: ${state}`);
+            // Add to connection history
+            trackConnectionState(`Server: ${state}`, message.reason || '');
             break;
             
           case 'ERROR':
@@ -506,6 +523,15 @@ app.get('/api/stats', (req, res) => {
   const cpMinutes = Math.floor((controlPanelUptime % 3600) / 60);
   const cpSeconds = controlPanelUptime % 60;
   const controlPanelUptimeFormatted = cpHours + 'h ' + cpMinutes + 'm ' + cpSeconds + 's';
+  
+  // Log the current status for debugging
+  console.log('Current bot status:', {
+    wsStatus: appState.wsStatus,
+    botUsername: appState.stats.botUsername,
+    botPid: appState.stats.botPid,
+    botUptime: appState.stats.botUptime,
+    lastStatusUpdate: appState.stats.lastStatusUpdate ? new Date(appState.stats.lastStatusUpdate).toISOString() : null
+  });
   
   // Return combined stats
   res.json({
@@ -709,6 +735,57 @@ app.post('/api/admin/shutdown', (req, res) => {
   }
 });
 
+// Add a new endpoint for connecting to a remote MaxBot instance
+app.post('/api/connect', (req, res) => {
+  console.log('Connect API endpoint called');
+  
+  const { host, port } = req.body;
+  
+  if (!host || !port) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Host and port are required' 
+    });
+  }
+  
+  try {
+    // Set environment variables for the WebSocket connection
+    process.env.WEBSOCKET_HOST = host;
+    process.env.WEBSOCKET_PORT = port;
+    
+    // Close existing WebSocket connection if open
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      addLog(`Closing existing WebSocket connection to reconnect to ${host}:${port}`);
+      ws.close();
+    } else {
+      // If not open or no connection exists, connect immediately
+      addLog(`Connecting to new WebSocket server at ${host}:${port}`);
+      connectToWebSocket();
+    }
+    
+    // Add to logs
+    const timestamp = new Date().toISOString();
+    appState.logs.push({
+      time: timestamp,
+      message: `Connection to ${host}:${port} initiated`
+    });
+    
+    // Add to connection history
+    appState.stats.connectionHistory.push({
+      time: Date.now(),
+      state: 'Connection Requested',
+      reason: `Manual connection to ${host}:${port}`
+    });
+    
+    console.log(`Connection to ${host}:${port} initiated`);
+    res.json({ success: true, message: `Connecting to ${host}:${port}...` });
+  } catch (error) {
+    console.error('Error connecting to WebSocket server:', error);
+    appState.stats.errors++;
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Add a simple GET endpoint for starting the bot
 app.get('/api/admin/start-bot', (req, res) => {
   console.log('Start bot endpoint called');
@@ -738,7 +815,7 @@ app.get('/api/admin/start-bot', (req, res) => {
           message: 'Bot start initiated via external script'
         });
         
-        // Add to connection history
+        // Add to connection history locally
         if (appState.stats && appState.stats.connectionHistory) {
           appState.stats.connectionHistory.push({
             time: Date.now(),
@@ -903,17 +980,46 @@ app.get('/', (req, res) => {
       .chat-badges {
         display: inline-flex;
         margin-right: 5px;
-        align-items: center;
       }
       
       .chat-badge {
-        width: 20px; /* Slightly larger badges */
-        height: 20px;
-        margin-right: 3px;
+        width: 18px;
+        height: 18px;
+        margin-right: 2px;
         border-radius: 3px;
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
+      }
+      
+      .badge-broadcaster {
+        background-color: #e91916;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
+      }
+      
+      .badge-moderator {
+        background-color: #34ae0a;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1');
+      }
+      
+      .badge-vip {
+        background-color: #e005b9;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/1');
+      }
+      
+      .badge-subscriber {
+        background-color: #6441a5;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1');
+      }
+      
+      .badge-premium {
+        background-color: #009cdc;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/bbbe0db0-a598-423e-86d0-f9fb98ca1933/1');
+      }
+      
+      .badge-bot {
+        background-color: #0099ff;
+        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
       }
       
       .chat-username {
@@ -1050,17 +1156,22 @@ app.get('/', (req, res) => {
       }
       
       .history-item {
-        padding: 5px;
+        padding: 8px;
         border-bottom: 1px solid #333;
+        display: flex;
+        align-items: center;
+        font-size: 14px;
       }
       
       .history-time {
         color: #888;
-        font-size: 0.8em;
+        font-size: 0.9em;
+        min-width: 80px;
       }
       
       .history-state {
         margin-left: 10px;
+        font-weight: bold;
       }
       
       .history-state.connected {
@@ -1075,6 +1186,188 @@ app.get('/', (req, res) => {
         color: #FF9800;
       }
       
+      .history-reason {
+        margin-left: 10px;
+        color: #aaa;
+        font-style: italic;
+        font-size: 0.9em;
+      }
+      
+      /* Connection settings styles */
+      .connection-settings {
+        margin-top: 10px;
+        background-color: #1a1a1a;
+        border-radius: 5px;
+        padding: 15px;
+      }
+      
+      .setting-item {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+      }
+      
+      .setting-item label {
+        width: 120px;
+        color: #aaa;
+      }
+      
+      .setting-item input[type="text"] {
+        flex: 1;
+        padding: 8px;
+        background-color: #2d2d2d;
+        border: 1px solid #444;
+        border-radius: 3px;
+        color: #e0e0e0;
+      }
+      
+      .admin-button {
+        padding: 8px 15px;
+        margin-top: 10px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      
+      .admin-button.success {
+        background-color: #4CAF50;
+        color: white;
+      }
+      
+      .admin-button.warning {
+        background-color: #FF9800;
+        color: white;
+      }
+      
+      .admin-button.danger {
+        background-color: #F44336;
+        color: white;
+      }
+      
+      .admin-button:hover {
+        opacity: 0.9;
+      }
+      
+      /* Modal styles */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+      }
+      
+      .modal-content {
+        background-color: #2d2d2d;
+        margin: 15% auto;
+        padding: 20px;
+        border-radius: 5px;
+        width: 50%;
+        max-width: 500px;
+      }
+      
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #444;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+      }
+      
+      .modal-header h3 {
+        margin: 0;
+        color: #e0e0e0;
+      }
+      
+      .close-modal {
+        color: #aaa;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      
+      .close-modal:hover {
+        color: #e0e0e0;
+      }
+      
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 20px;
+        gap: 10px;
+      }
+      
+      .modal-button {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        background-color: #555;
+        color: white;
+      }
+      
+      .modal-button.danger {
+        background-color: #F44336;
+      }
+      
+      .modal-button:hover {
+        opacity: 0.9;
+      }
+      
+      /* Connection history styles */
+      .admin-history {
+        max-height: 200px;
+        overflow-y: auto;
+        background-color: #1a1a1a;
+        border-radius: 3px;
+        padding: 5px;
+        margin-bottom: 15px;
+      }
+      
+      .history-entry {
+        padding: 8px;
+        border-bottom: 1px solid #333;
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        margin-bottom: 5px;
+      }
+      
+      .history-time {
+        color: #888;
+        margin-right: 10px;
+        font-size: 0.9em;
+      }
+      
+      .history-event {
+        margin-left: 10px;
+        font-weight: bold;
+      }
+      
+      .state-connected {
+        color: #4CAF50;
+      }
+      
+      .state-disconnected {
+        color: #f44336;
+      }
+      
+      .state-error {
+        color: #ff9800;
+      }
+      
+      .history-reason {
+        margin-left: 10px;
+        color: #aaa;
+        font-style: italic;
+        font-size: 0.9em;
+      }
+      
       @media (max-width: 768px) {
         .main-content {
           flex-direction: column;
@@ -1083,51 +1376,6 @@ app.get('/', (req, res) => {
         .stat-card {
           min-width: 100%;
         }
-      }
-      
-      .chat-badges {
-        display: inline-flex;
-        margin-right: 5px;
-      }
-      
-      .chat-badge {
-        width: 18px;
-        height: 18px;
-        margin-right: 2px;
-        border-radius: 3px;
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-      }
-      
-      .badge-broadcaster {
-        background-color: #e91916;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
-      }
-      
-      .badge-moderator {
-        background-color: #34ae0a;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1');
-      }
-      
-      .badge-vip {
-        background-color: #e005b9;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/1');
-      }
-      
-      .badge-subscriber {
-        background-color: #6441a5;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1');
-      }
-      
-      .badge-premium {
-        background-color: #009cdc;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/bbbe0db0-a598-423e-86d0-f9fb98ca1933/1');
-      }
-      
-      .badge-bot {
-        background-color: #0099ff;
-        background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
       }
     </style>
   </head>
@@ -1309,6 +1557,26 @@ app.get('/', (req, res) => {
                   <!-- Connection history will be populated here -->
                 </div>
               </div>
+
+              <div class="admin-section">
+                <h3>Remote Connection Settings</h3>
+                <div class="connection-settings">
+                  <div class="setting-item">
+                    <label for="ws-host">WebSocket Host:</label>
+                    <input type="text" id="ws-host" placeholder="localhost or IP address">
+                  </div>
+                  <div class="setting-item">
+                    <label for="ws-port">WebSocket Port:</label>
+                    <input type="text" id="ws-port" placeholder="8080">
+                  </div>
+                  <button id="connect-button" class="admin-button success">
+                    <span class="button-icon">🔌</span> Connect
+                  </button>
+                </div>
+                <div class="admin-note">
+                  <p><strong>Note:</strong> If MaxBot is running on another computer, enter its IP address and WebSocket port (default: 8080).</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1395,7 +1663,7 @@ app.get('/', (req, res) => {
             logs.forEach(log => {
               const logEntry = document.createElement('div');
               logEntry.className = 'log-entry';
-              logEntry.textContent = \`[\${new Date(log.time).toLocaleTimeString()}] \${log.message}\`;
+              logEntry.textContent = '[' + new Date(log.time).toLocaleTimeString() + '] ' + log.message;
               logsContainer.appendChild(logEntry);
             });
             logsContainer.scrollTop = logsContainer.scrollHeight;
@@ -1438,7 +1706,7 @@ app.get('/', (req, res) => {
               timeSpan.style.fontSize = '16px';
               timeSpan.textContent = '[' + new Date(entry.time).toLocaleTimeString() + ']';
               
-              // Create badges (simple text-based version)
+              // Create badges
               let badgeText = '';
               
               // Check username for special badges
@@ -1534,8 +1802,8 @@ app.get('/', (req, res) => {
               const heapTotal = Math.round(stats.bot.memoryUsage.heapTotal / 1024 / 1024 * 100) / 100;
               const percentage = Math.round((heapUsed / heapTotal) * 100);
               
-              document.getElementById('bot-memory').textContent = \`\${heapUsed} MB / \${heapTotal} MB (\${percentage}%)\`;
-              document.getElementById('memory-bar').style.width = \`\${percentage}%\`;
+              document.getElementById('bot-memory').textContent = heapUsed + ' MB / ' + heapTotal + ' MB (' + percentage + '%)';
+              document.getElementById('memory-bar').style.width = percentage + '%';
             } else {
               document.getElementById('bot-memory').textContent = '-';
               document.getElementById('memory-bar').style.width = '0%';
@@ -1559,7 +1827,7 @@ app.get('/', (req, res) => {
               const usedMemory = Math.round((totalMemory - freeMemory) * 100) / 100;
               const percentage = Math.round((usedMemory / totalMemory) * 100);
               
-              document.getElementById('sys-memory').textContent = \`\${usedMemory} GB / \${totalMemory} GB (\${percentage}%)\`;
+              document.getElementById('sys-memory').textContent = usedMemory + ' GB / ' + totalMemory + ' GB (' + percentage + '%)';
             } else {
               document.getElementById('sys-memory').textContent = '-';
             }
@@ -1569,7 +1837,7 @@ app.get('/', (req, res) => {
               const hours = Math.floor((stats.system.uptime % 86400) / 3600);
               const minutes = Math.floor((stats.system.uptime % 3600) / 60);
               
-              document.getElementById('sys-uptime').textContent = \`\${days}d \${hours}h \${minutes}m\`;
+              document.getElementById('sys-uptime').textContent = days + 'd ' + hours + 'h ' + minutes + 'm';
             } else {
               document.getElementById('sys-uptime').textContent = '-';
             }
@@ -1587,11 +1855,10 @@ app.get('/', (req, res) => {
                 const stateClass = item.state.toLowerCase().includes('connected') ? 'connected' : 
                                   item.state.toLowerCase().includes('error') ? 'error' : 'disconnected';
                 
-                historyItem.innerHTML = \`
-                  <span class="history-time">\${time}</span>
-                  <span class="history-state \${stateClass}">\${item.state}</span>
-                  \${item.reason ? \`<span class="history-reason">(\${item.reason})</span>\` : ''}
-                \`;
+                historyItem.innerHTML = 
+                  '<span class="history-time">' + time + '</span>' +
+                  '<span class="history-state ' + stateClass + '">' + item.state + '</span>' +
+                  (item.reason ? '<span class="history-reason">(' + item.reason + ')</span>' : '');
                 
                 historyContainer.appendChild(historyItem);
               });
@@ -1724,9 +1991,18 @@ app.get('/', (req, res) => {
             
             // Update bot status
             if (data.bot) {
-              // Update status display
-              adminBotStatus.textContent = data.connection.status || data.bot.status || 'Unknown';
+              // Update status display - prioritize the connection status from the bot
+              adminBotStatus.textContent = data.bot.status || data.connection.status || 'Unknown';
               console.log('Setting status to:', adminBotStatus.textContent);
+              
+              // Set status color based on connection state
+              if (adminBotStatus.textContent.toLowerCase() === 'connected') {
+                adminBotStatus.style.color = '#4CAF50'; // Green
+              } else if (adminBotStatus.textContent.toLowerCase() === 'disconnected') {
+                adminBotStatus.style.color = '#f44336'; // Red
+              } else {
+                adminBotStatus.style.color = '#ff9800'; // Orange for unknown or other states
+              }
               
               // Update uptime
               if (data.bot.uptimeFormatted) {
@@ -1752,7 +2028,7 @@ app.get('/', (req, res) => {
               adminBotPid.textContent = '-';
             }
             
-            // Update connection history if the element exists
+            // Update connection history if available
             if (adminConnectionHistory && data.controlPanel && data.controlPanel.connectionHistory) {
               adminConnectionHistory.innerHTML = '';
               
@@ -1760,10 +2036,23 @@ app.get('/', (req, res) => {
                 const historyEntry = document.createElement('div');
                 historyEntry.className = 'history-entry';
                 
-                const time = new Date(entry.time).toLocaleTimeString();
+                // Format time
+                const date = new Date(entry.time);
+                const time = date.toLocaleTimeString();
+                
+                // Determine state class
+                let stateClass = '';
+                if (entry.state.toLowerCase().includes('connected')) {
+                  stateClass = 'state-connected';
+                } else if (entry.state.toLowerCase().includes('disconnected')) {
+                  stateClass = 'state-disconnected';
+                } else if (entry.state.toLowerCase().includes('error')) {
+                  stateClass = 'state-error';
+                }
+                
                 historyEntry.innerHTML = 
                   '<span class="history-time">' + time + '</span>' +
-                  '<span class="history-event">' + entry.state + '</span>' +
+                  '<span class="history-event ' + stateClass + '">' + entry.state + '</span>' +
                   (entry.reason ? '<span class="history-reason">(' + entry.reason + ')</span>' : '');
                 
                 adminConnectionHistory.appendChild(historyEntry);
@@ -1779,6 +2068,57 @@ app.get('/', (req, res) => {
       updateAdminPanel();
       setInterval(updateAdminPanel, 2000);
       
+      // Modal handling
+      const modal = document.getElementById('confirmation-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalMessage = document.getElementById('modal-message');
+      const modalConfirm = document.getElementById('modal-confirm');
+      const modalCancel = document.getElementById('modal-cancel');
+      const closeModal = document.querySelector('.close-modal');
+      
+      // Hide modal by default
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      
+      // Close modal when clicking the X
+      if (closeModal) {
+        closeModal.onclick = function() {
+          modal.style.display = 'none';
+        };
+      }
+      
+      // Close modal when clicking Cancel
+      if (modalCancel) {
+        modalCancel.onclick = function() {
+          modal.style.display = 'none';
+        };
+      }
+      
+      // Close modal when clicking outside
+      window.onclick = function(event) {
+        if (event.target === modal) {
+          modal.style.display = 'none';
+        }
+      };
+      
+      // Function to show modal with custom title, message, and action
+      function showConfirmationModal(title, message, confirmAction) {
+        if (!modal) return;
+        
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        
+        // Set up confirm button action
+        modalConfirm.onclick = function() {
+          confirmAction();
+          modal.style.display = 'none';
+        };
+        
+        // Show the modal
+        modal.style.display = 'block';
+      }
+      
       // Replace the existing button handlers with these direct WebSocket implementations
       window.addEventListener('load', function() {
         console.log('Page fully loaded, attaching button handlers');
@@ -1787,114 +2127,181 @@ app.get('/', (req, res) => {
         const restartBtn = document.getElementById('restart-bot');
         const shutdownBtn = document.getElementById('shutdown-bot');
         const startBtn = document.getElementById('start-bot');
+        const connectBtn = document.getElementById('connect-button');
+        const wsHostInput = document.getElementById('ws-host');
+        const wsPortInput = document.getElementById('ws-port');
         
         console.log('Button elements:', { 
           restart: restartBtn, 
           shutdown: shutdownBtn, 
-          start: startBtn 
+          start: startBtn,
+          connect: connectBtn
         });
+        
+        // Set initial values from localStorage if available
+        if (wsHostInput && wsPortInput) {
+          wsHostInput.value = localStorage.getItem('wsHost') || '';
+          wsPortInput.value = localStorage.getItem('wsPort') || '';
+        }
+        
+        // Add handler for connect button
+        if (connectBtn && wsHostInput && wsPortInput) {
+          connectBtn.onclick = function() {
+            const host = wsHostInput.value.trim();
+            const port = wsPortInput.value.trim();
+            
+            if (!host) {
+              alert('Please enter a valid WebSocket host');
+              return;
+            }
+            
+            if (!port || isNaN(parseInt(port))) {
+              alert('Please enter a valid WebSocket port');
+              return;
+            }
+            
+            // Save to localStorage for future use
+            localStorage.setItem('wsHost', host);
+            localStorage.setItem('wsPort', port);
+            
+            // Send connection request to server
+            fetch('/api/connect', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ host, port })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert('Connecting to MaxBot at ' + host + ':' + port + '...');
+                // Refresh the admin panel after a short delay
+                setTimeout(updateAdminPanel, 2000);
+              } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+              }
+            })
+            .catch(error => {
+              console.error('Connection error:', error);
+              alert('Error connecting to MaxBot: ' + error.message);
+            });
+          };
+        }
         
         if (restartBtn) {
           restartBtn.onclick = function() {
             console.log('Restart button clicked');
-            if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
-              fetch('/api/admin/restart', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              })
-              .then(function(response) {
-                return response.json();
-              })
-              .then(function(data) {
-                console.log('Restart response:', data);
-                if (data.success) {
-                  alert('Restart command sent. The bot will restart shortly.');
-                } else {
-                  alert('Error: ' + (data.error || 'Unknown error'));
-                }
-              })
-              .catch(function(error) {
-                console.error('Restart error:', error);
-                alert('Error restarting bot: ' + error.message);
-              });
-            }
+            showConfirmationModal(
+              'Confirm Restart',
+              'Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.',
+              function() {
+                fetch('/api/admin/restart', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                })
+                .then(function(response) {
+                  return response.json();
+                })
+                .then(function(data) {
+                  console.log('Restart response:', data);
+                  if (data.success) {
+                    alert('Restart command sent. The bot will restart shortly.');
+                  } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                  }
+                })
+                .catch(function(error) {
+                  console.error('Restart error:', error);
+                  alert('Error restarting bot: ' + error.message);
+                });
+              }
+            );
           };
         }
         
         if (shutdownBtn) {
           shutdownBtn.onclick = function() {
             console.log('Shutdown button clicked');
-            if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
-              fetch('/api/admin/shutdown', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              })
-              .then(function(response) {
-                return response.json();
-              })
-              .then(function(data) {
-                console.log('Shutdown response:', data);
-                if (data.success) {
-                  alert('Shutdown command sent. The bot will shut down shortly.');
-                } else {
-                  alert('Error: ' + (data.error || 'Unknown error'));
-                }
-              })
-              .catch(function(error) {
-                console.error('Shutdown error:', error);
-                alert('Error shutting down bot: ' + error.message);
-              });
-            }
+            showConfirmationModal(
+              'Confirm Shutdown',
+              'Are you sure you want to shut down the bot? You will need to manually restart it.',
+              function() {
+                fetch('/api/admin/shutdown', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                })
+                .then(function(response) {
+                  return response.json();
+                })
+                .then(function(data) {
+                  console.log('Shutdown response:', data);
+                  if (data.success) {
+                    alert('Shutdown command sent. The bot will shut down shortly.');
+                  } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                  }
+                })
+                .catch(function(error) {
+                  console.error('Shutdown error:', error);
+                  alert('Error shutting down bot: ' + error.message);
+                });
+              }
+            );
           };
         }
         
         if (startBtn) {
           startBtn.onclick = function() {
             console.log('Start button clicked');
-            if (confirm('Are you sure you want to start the bot?')) {
-              // Use a simple GET endpoint that doesn't return JSON
-              fetch('/api/admin/start-bot', {
-                method: 'GET'
-              })
-              .then(function(response) {
-                if (response.ok) {
-                  alert('Bot start initiated. Check logs for details.');
-                  
-                  // Add to logs locally
-                  const timestamp = new Date().toISOString();
-                  if (window.appState && window.appState.logs) {
-                    window.appState.logs.push({
-                      time: timestamp,
-                      message: 'Bot start initiated via external script'
+            showConfirmationModal(
+              'Confirm Start',
+              'Are you sure you want to start the bot?',
+              function() {
+                // Use a simple GET endpoint that doesn't return JSON
+                fetch('/api/admin/start-bot', {
+                  method: 'GET'
+                })
+                .then(function(response) {
+                  if (response.ok) {
+                    alert('Bot start initiated. Check logs for details.');
+                    
+                    // Add to logs locally
+                    const timestamp = new Date().toISOString();
+                    if (window.appState && window.appState.logs) {
+                      window.appState.logs.push({
+                        time: timestamp,
+                        message: 'Bot start initiated via external script'
+                      });
+                    }
+                    
+                    // Add to connection history locally
+                    if (window.appState && window.appState.stats && window.appState.stats.connectionHistory) {
+                      window.appState.stats.connectionHistory.push({
+                        time: Date.now(),
+                        state: 'Start Requested',
+                        reason: 'User initiated start via external script'
+                      });
+                    }
+                    
+                    // Refresh the admin panel after a short delay
+                    setTimeout(updateAdminPanel, 2000);
+                  } else {
+                    response.text().then(text => {
+                      alert('Error starting bot: ' + text);
                     });
                   }
-                  
-                  // Add to connection history locally
-                  if (window.appState && window.appState.stats && window.appState.stats.connectionHistory) {
-                    window.appState.stats.connectionHistory.push({
-                      time: Date.now(),
-                      state: 'Start Requested',
-                      reason: 'User initiated start via external script'
-                    });
-                  }
-                  
-                  // Refresh the admin panel after a short delay
-                  setTimeout(updateAdminPanel, 2000);
-                } else {
-                  response.text().then(text => {
-                    alert('Error starting bot: ' + text);
-                  });
-                }
-              })
-              .catch(function(error) {
-                console.error('Start error:', error);
-                alert('Error starting bot: ' + error.message);
-              });
-            }
+                })
+                .catch(function(error) {
+                  console.error('Start error:', error);
+                  alert('Error starting bot: ' + error.message);
+                });
+              }
+            );
           };
         }
       });
