@@ -1649,75 +1649,144 @@ app.get('/', (req, res) => {
           });
       }
       
-      // Restart bot
-      restartBotButton.addEventListener('click', () => {
-        if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
-          fetch('/api/admin/restart', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                addLog('Bot restart initiated');
+      // First, make sure we have direct references to the buttons
+      document.addEventListener('DOMContentLoaded', function() {
+        // Get button references after the DOM is fully loaded
+        const restartBotButton = document.getElementById('restart-bot');
+        const shutdownBotButton = document.getElementById('shutdown-bot');
+        const startBotButton = document.getElementById('start-bot');
+        
+        if (restartBotButton) {
+          restartBotButton.onclick = function() {
+            console.log('Restart button clicked');
+            if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
+              // Send the restart command directly via WebSocket
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                  const restartMsg = {
+                    type: 'RESTART_BOT',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                  };
+                  
+                  ws.send(JSON.stringify(restartMsg));
+                  addLog('Sent restart command to bot');
+                  alert('Restart command sent to bot');
+                } catch (error) {
+                  console.error('Error sending restart command:', error);
+                  addLog('Error sending restart command: ' + error.message);
+                  alert('Error sending restart command: ' + error.message);
+                }
               } else {
-                addLog('Error restarting bot: ' + (data.error || 'Unknown error'));
+                alert('WebSocket is not connected. Cannot send restart command.');
+                addLog('WebSocket is not connected. Cannot send restart command.');
               }
-            })
-            .catch(error => {
-              console.error('Error restarting bot:', error);
-              addLog('Error restarting bot: ' + error.message);
-            });
+            }
+          };
+        } else {
+          console.error('Restart button not found');
+        }
+        
+        if (shutdownBotButton) {
+          shutdownBotButton.onclick = function() {
+            console.log('Shutdown button clicked');
+            if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
+              // Send the shutdown command directly via WebSocket
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                  const shutdownMsg = {
+                    type: 'EXIT_BOT',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                  };
+                  
+                  ws.send(JSON.stringify(shutdownMsg));
+                  addLog('Sent shutdown command to bot');
+                  alert('Shutdown command sent to bot');
+                } catch (error) {
+                  console.error('Error sending shutdown command:', error);
+                  addLog('Error sending shutdown command: ' + error.message);
+                  alert('Error sending shutdown command: ' + error.message);
+                }
+              } else {
+                alert('WebSocket is not connected. Cannot send shutdown command.');
+                addLog('WebSocket is not connected. Cannot send shutdown command.');
+              }
+            }
+          };
+        } else {
+          console.error('Shutdown button not found');
+        }
+        
+        if (startBotButton) {
+          startBotButton.onclick = function() {
+            console.log('Start button clicked');
+            if (confirm('Are you sure you want to start the bot?')) {
+              // For starting the bot, we'll use a fetch request to a new endpoint
+              fetch('/api/admin/start', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              })
+                .then(response => response.json())
+                .then(data => {
+                  if (data.success) {
+                    addLog('Bot start initiated');
+                    alert('Bot start initiated');
+                  } else {
+                    addLog('Error starting bot: ' + (data.error || 'Unknown error'));
+                    alert('Error starting bot: ' + (data.error || 'Unknown error'));
+                  }
+                })
+                .catch(error => {
+                  console.error('Error starting bot:', error);
+                  addLog('Error starting bot: ' + error.message);
+                  alert('Error starting bot: ' + error.message);
+                });
+            }
+          };
+        } else {
+          console.error('Start button not found');
         }
       });
       
-      // Shutdown bot
-      shutdownBotButton.addEventListener('click', () => {
-        if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
-          fetch('/api/admin/shutdown', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                addLog('Bot shutdown initiated');
-              } else {
-                addLog('Error shutting down bot: ' + (data.error || 'Unknown error'));
-              }
-            })
-            .catch(error => {
-              console.error('Error shutting down bot:', error);
-              addLog('Error shutting down bot: ' + error.message);
-            });
-        }
-      });
-      
-      // Start bot
-      startBotButton.addEventListener('click', () => {
-        if (confirm('Are you sure you want to start the bot?')) {
-          fetch('/api/admin/start', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                addLog('Bot start initiated');
-              } else {
-                addLog('Error starting bot: ' + (data.error || 'Unknown error'));
-              }
-            })
-            .catch(error => {
-              console.error('Error starting bot:', error);
-              addLog('Error starting bot: ' + error.message);
-            });
+      // Add this API endpoint for starting the bot
+      app.post('/api/admin/start', (req, res) => {
+        try {
+          const { spawn } = require('child_process');
+          const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
+          
+          console.log('Attempting to start bot at path:', botPath);
+          
+          // Check if the bot file exists
+          if (!fs.existsSync(botPath)) {
+            console.error('Bot file not found:', botPath);
+            return res.status(404).json({ error: 'Bot file not found: ' + botPath });
+          }
+          
+          // Spawn the bot process
+          const botProcess = spawn('node', [botPath], {
+            detached: true,
+            stdio: 'ignore',
+            env: process.env
+          });
+          
+          // Unref the child process so it can run independently
+          botProcess.unref();
+          
+          console.log('Started bot process with PID:', botProcess.pid);
+          addLog(`Started bot process with PID: ${botProcess.pid}`);
+          
+          // Track the start in connection history
+          trackConnectionState('Start Requested', 'User initiated start');
+          
+          res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
+        } catch (error) {
+          console.error('Error starting bot:', error);
+          addLog(`Error starting bot: ${error.message}`);
+          appState.stats.errors++;
+          res.status(500).json({ error: error.message });
         }
       });
       
@@ -1789,12 +1858,14 @@ app.post('/api/admin/shutdown', (req, res) => {
 
 app.post('/api/admin/start', (req, res) => {
   try {
-    // This is a placeholder - actual implementation would depend on how you want to start the bot
     const { spawn } = require('child_process');
     const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
     
+    console.log('Attempting to start bot at path:', botPath);
+    
     // Check if the bot file exists
     if (!fs.existsSync(botPath)) {
+      console.error('Bot file not found:', botPath);
       return res.status(404).json({ error: 'Bot file not found: ' + botPath });
     }
     
@@ -1808,6 +1879,7 @@ app.post('/api/admin/start', (req, res) => {
     // Unref the child process so it can run independently
     botProcess.unref();
     
+    console.log('Started bot process with PID:', botProcess.pid);
     addLog(`Started bot process with PID: ${botProcess.pid}`);
     
     // Track the start in connection history
@@ -1815,6 +1887,7 @@ app.post('/api/admin/start', (req, res) => {
     
     res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
   } catch (error) {
+    console.error('Error starting bot:', error);
     addLog(`Error starting bot: ${error.message}`);
     appState.stats.errors++;
     res.status(500).json({ error: error.message });
