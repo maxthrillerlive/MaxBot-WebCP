@@ -40,6 +40,11 @@ class BotUI {
             // Create only the status panel
             this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
             
+            // Directly set content to verify it works
+            if (this.statusPanel && this.statusPanel.panel) {
+                this.statusPanel.panel.setContent('DIRECT TEST: Panel is working');
+            }
+            
             // Keep the existing panels for compatibility, but don't create new ones
             this.commandBox = this.grid.set(3, 0, 3, 12, blessed.box, {
                 label: ' Commands (Disabled) ',
@@ -89,9 +94,9 @@ class BotUI {
                 }
             });
             
-            // Test the status panel directly
+            // Test the status panel again after a delay
             setTimeout(() => {
-                console.log('Testing status panel directly from UI');
+                console.log('Testing status panel after delay');
                 if (this.statusPanel) {
                     this.statusPanel.updateStatus({
                         connected: true,
@@ -99,10 +104,8 @@ class BotUI {
                         uptime: 123
                     });
                     this.screen.render();
-                } else {
-                    console.log('Status panel not available for test');
                 }
-            }, 3000);
+            }, 2000);
             
             // Mark as initialized
             this.initialized = true;
@@ -180,11 +183,30 @@ class BotUI {
     updateStatus(status) {
         console.log('UI.updateStatus called with:', JSON.stringify(status));
         
-        if (this.statusPanel) {
-            this.statusPanel.updateStatus(status);
+        // Direct panel content update as a fallback
+        if (this.statusPanel && this.statusPanel.panel) {
+            try {
+                // Try the panel's updateStatus method
+                this.statusPanel.updateStatus(status);
+            } catch (error) {
+                console.error('Error calling statusPanel.updateStatus:', error);
+                
+                // Fallback: update content directly
+                try {
+                    this.statusPanel.panel.setContent(
+                        `Status: ${status.connected ? 'Connected' : 'Disconnected'}\n` +
+                        `Channel: ${status.channel || 'Unknown'}\n` +
+                        `Uptime: ${status.uptime || 0}s`
+                    );
+                } catch (directError) {
+                    console.error('Error updating panel content directly:', directError);
+                }
+            }
+            
+            // Force render
             this.screen.render();
         } else {
-            console.log('Status panel not initialized');
+            console.log('Status panel not available');
         }
     }
 

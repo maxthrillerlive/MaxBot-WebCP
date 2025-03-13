@@ -7,7 +7,7 @@ class StatusPanel {
     this.panel = grid.set(row, col, rowSpan, colSpan, blessed.box, {
       label: ' Bot Status ',
       tags: true,
-      content: '{center}Connecting to bot...{/center}',
+      content: 'Initializing...',
       border: {
         type: 'line',
         fg: 'cyan'
@@ -20,54 +20,22 @@ class StatusPanel {
       }
     });
     
-    // Set a test message to verify the panel is working
-    setTimeout(() => {
-      console.log('Setting test message in status panel');
-      this.panel.setContent('{bold}TEST:{/bold} Status panel is working');
-      // Force a render
-      if (this.panel.screen) {
-        this.panel.screen.render();
-      }
-    }, 2000);
+    // Set initial content directly
+    this.panel.setContent('Status: Waiting for connection...');
   }
 
   updateStatus(status) {
     try {
       console.log('StatusPanel.updateStatus called with:', JSON.stringify(status));
       
-      // Default values if not provided
-      const connected = status.connected !== undefined ? status.connected : false;
-      const channel = status.channel || 'Unknown';
-      const uptime = status.uptime !== undefined ? status.uptime : 0;
-      
-      // Format the uptime
-      let uptimeStr;
-      if (uptime > 0) {
-        const hours = Math.floor(uptime / 3600);
-        const minutes = Math.floor((uptime % 3600) / 60);
-        const seconds = Math.floor(uptime % 60);
-        
-        if (hours > 0) {
-          uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
-        } else if (minutes > 0) {
-          uptimeStr = `${minutes}m ${seconds}s`;
-        } else {
-          uptimeStr = `${seconds}s`;
-        }
-      } else {
-        uptimeStr = '0s';
-      }
-      
-      // Format the display
-      const connectedStatus = connected ? '{green-fg}Connected{/green-fg}' : '{red-fg}Disconnected{/red-fg}';
-      
+      // Very simple content update
       this.panel.setContent(
-        `{bold}Connection:{/bold} ${connectedStatus}\n` +
-        `{bold}Channel:{/bold} ${channel}\n` +
-        `{bold}Uptime:{/bold} ${uptimeStr}`
+        `Status: ${status.connected ? 'Connected' : 'Disconnected'}\n` +
+        `Channel: ${status.channel || 'Unknown'}\n` +
+        `Uptime: ${status.uptime || 0}s`
       );
       
-      console.log('Status panel updated');
+      console.log('Status panel content updated');
     } catch (error) {
       console.error('Error updating status panel:', error);
     }
