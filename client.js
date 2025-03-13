@@ -230,9 +230,13 @@ class BotClient {
                 if (this.ws) {
                     this.ws.close();
                 }
+                // Exit the TUI after sending the shutdown command
+                setTimeout(() => process.exit(0), 500);
             }, 1000);
         } else {
             this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
+            // Exit anyway since we're not connected
+            setTimeout(() => process.exit(0), 500);
         }
     }
 }

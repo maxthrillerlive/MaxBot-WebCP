@@ -118,7 +118,7 @@ class BotUI {
                 fg: 'cyan'
             },
             style: {
-                fg: 'white',
+                    fg: 'white',
                 border: {
                     fg: 'cyan'
                 }
@@ -138,8 +138,8 @@ class BotUI {
             },
             style: {
                 selected: {
-                    bg: 'cyan',
-                    fg: 'black'
+                        bg: 'cyan',
+                        fg: 'black'
                 },
                 item: {
                     fg: 'white'
@@ -370,8 +370,9 @@ class BotUI {
     async confirmExit() {
         const confirm = await this.showConfirmDialog('Are you sure you want to exit?');
         if (confirm) {
-            this.client.exitBot();
-            setTimeout(() => process.exit(0), 1000);
+            // Just exit the TUI without shutting down the bot
+            this.logToConsole('{yellow-fg}Exiting TUI...{/yellow-fg}');
+            setTimeout(() => process.exit(0), 500);
         }
     }
 
@@ -401,16 +402,16 @@ class BotUI {
 
             // Make sure the dialog is above other elements
             dialog.setFront();
-            this.screen.render();
+                this.screen.render();
 
             // Create a separate key handler for this dialog
             const keyHandler = (ch, key) => {
                 if (key.name === 'y' || key.name === 'Y') {
-                    cleanup();
-                    resolve(true);
+                cleanup();
+                resolve(true);
                 } else if (key.name === 'n' || key.name === 'N' || key.name === 'escape') {
-                    cleanup();
-                    resolve(false);
+                cleanup();
+                resolve(false);
                 }
             };
 
