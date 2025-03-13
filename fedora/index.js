@@ -20,17 +20,32 @@ class FedoraIntegration extends EventEmitter {
     try {
       if (fs.existsSync('/etc/fedora-release')) {
         this.isFedora = true;
-        this.ui.logToConsole('{cyan-fg}Fedora Linux detected, enabling Fedora-specific features{/cyan-fg}');
+        // Make sure this.ui exists before calling methods on it
+        if (this.ui && typeof this.ui.logToConsole === 'function') {
+          this.ui.logToConsole('{cyan-fg}Fedora Linux detected, enabling Fedora-specific features{/cyan-fg}');
+        } else {
+          console.log('Fedora Linux detected, enabling Fedora-specific features');
+        }
       } else {
         // Try to detect using os-release
         const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
         if (osRelease.includes('Fedora')) {
           this.isFedora = true;
-          this.ui.logToConsole('{cyan-fg}Fedora Linux detected, enabling Fedora-specific features{/cyan-fg}');
+          // Make sure this.ui exists before calling methods on it
+          if (this.ui && typeof this.ui.logToConsole === 'function') {
+            this.ui.logToConsole('{cyan-fg}Fedora Linux detected, enabling Fedora-specific features{/cyan-fg}');
+          } else {
+            console.log('Fedora Linux detected, enabling Fedora-specific features');
+          }
         }
       }
     } catch (error) {
-      this.ui.logToConsole('{yellow-fg}Not running on Fedora Linux, skipping Fedora-specific features{/yellow-fg}');
+      // Make sure this.ui exists before calling methods on it
+      if (this.ui && typeof this.ui.logToConsole === 'function') {
+        this.ui.logToConsole('{yellow-fg}Not running on Fedora Linux, skipping Fedora-specific features{/yellow-fg}');
+      } else {
+        console.log('Not running on Fedora Linux, skipping Fedora-specific features');
+      }
       return false;
     }
 
@@ -39,13 +54,21 @@ class FedoraIntegration extends EventEmitter {
     }
 
     // Initialize Fedora-specific UI elements
-    this.setupUI();
+    if (this.ui) {
+      this.setupUI();
+    }
     
     // Register message handlers
     this.registerMessageHandlers();
     
     this.isEnabled = true;
-    this.ui.logToConsole('{green-fg}Fedora integration enabled successfully{/green-fg}');
+    
+    // Make sure this.ui exists before calling methods on it
+    if (this.ui && typeof this.ui.logToConsole === 'function') {
+      this.ui.logToConsole('{green-fg}Fedora integration enabled successfully{/green-fg}');
+    } else {
+      console.log('Fedora integration enabled successfully');
+    }
     
     return true;
   }

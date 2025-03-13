@@ -23,8 +23,14 @@ class BotClient extends EventEmitter {
             commands: []
         };
         
-        // Initialize Fedora integration if available
-        fedora.initialize(this, ui);
+        // Make sure ui is fully initialized before passing it to Fedora integration
+        if (ui && typeof ui.logToConsole === 'function') {
+            // Initialize Fedora integration if available
+            fedora.initialize(this, ui);
+        } else {
+            console.log('UI not fully initialized, deferring Fedora integration');
+            // We'll initialize it later when UI is ready
+        }
         this.connect();
     }
 
@@ -395,6 +401,13 @@ class BotClient extends EventEmitter {
                 type: 'send-dbus-notification',
                 data: { title, body, icon }
             }));
+        }
+    }
+
+    // Add a method to initialize Fedora integration later if needed
+    initializeFedora() {
+        if (this.ui && typeof this.ui.logToConsole === 'function' && !fedora.isEnabled) {
+            fedora.initialize(this, this.ui);
         }
     }
 }
