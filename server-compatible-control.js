@@ -584,6 +584,81 @@ app.post('/api/exit', (req, res) => {
   }, 500);
 });
 
+// Update the API endpoints for restart and shutdown
+app.post('/api/admin/restart', (req, res) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    const restartMsg = {
+      type: 'RESTART_BOT',
+      client_id: clientId,
+      timestamp: Date.now()
+    };
+    
+    ws.send(JSON.stringify(restartMsg));
+    console.log('Sent restart command to bot');
+    
+    // Add to logs
+    const timestamp = new Date().toISOString();
+    appState.logs.push({
+      time: timestamp,
+      message: 'Sent restart command to bot'
+    });
+    
+    // Add to connection history
+    appState.stats.connectionHistory.push({
+      time: Date.now(),
+      state: 'Restart Requested',
+      reason: 'User initiated restart via API'
+    });
+    
+    res.json({ success: true, message: 'Restart command sent' });
+  } catch (error) {
+    console.error('Error sending restart command:', error);
+    appState.stats.errors++;
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/shutdown', (req, res) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    const shutdownMsg = {
+      type: 'EXIT_BOT',
+      client_id: clientId,
+      timestamp: Date.now()
+    };
+    
+    ws.send(JSON.stringify(shutdownMsg));
+    console.log('Sent shutdown command to bot');
+    
+    // Add to logs
+    const timestamp = new Date().toISOString();
+    appState.logs.push({
+      time: timestamp,
+      message: 'Sent shutdown command to bot'
+    });
+    
+    // Add to connection history
+    appState.stats.connectionHistory.push({
+      time: Date.now(),
+      state: 'Shutdown Requested',
+      reason: 'User initiated shutdown via API'
+    });
+    
+    res.json({ success: true, message: 'Shutdown command sent' });
+  } catch (error) {
+    console.error('Error sending shutdown command:', error);
+    appState.stats.errors++;
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Serve HTML for the control panel
 app.get('/', (req, res) => {
   const html = `
@@ -1649,7 +1724,7 @@ app.get('/', (req, res) => {
           });
       }
       
-      // First, make sure we have direct references to the buttons
+      // Replace the existing button handlers with these direct WebSocket implementations
       window.addEventListener('load', function() {
         console.log('Page fully loaded, attaching button handlers');
         
@@ -1667,19 +1742,40 @@ app.get('/', (req, res) => {
         if (restartBtn) {
           restartBtn.onclick = function() {
             console.log('Restart button clicked');
-            if (confirm('Are you sure you want to restart the bot?')) {
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                const msg = {
-                  type: 'RESTART_BOT',
-                  client_id: clientId,
-                  timestamp: Date.now()
-                };
-                ws.send(JSON.stringify(msg));
-                console.log('Restart command sent');
-                alert('Restart command sent');
-              } else {
-                console.error('WebSocket not connected');
-                alert('Cannot restart: WebSocket not connected');
+            if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
+              try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  const msg = {
+                    type: 'RESTART_BOT',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                  };
+                  
+                  console.log('Sending restart command:', msg);
+                  ws.send(JSON.stringify(msg));
+                  
+                  // Add to logs
+                  const timestamp = new Date().toISOString();
+                  appState.logs.push({
+                    time: timestamp,
+                    message: 'Sent restart command to bot'
+                  });
+                  
+                  // Add to connection history
+                  appState.stats.connectionHistory.push({
+                    time: Date.now(),
+                    state: 'Restart Requested',
+                    reason: 'User initiated restart via API'
+                  });
+                  
+                  alert('Restart command sent. The bot will restart shortly.');
+                } else {
+                  console.error('WebSocket not connected');
+                  alert('Cannot restart: WebSocket not connected');
+                }
+              } catch (error) {
+                console.error('Error sending restart command:', error);
+                alert('Error sending restart command: ' + error.message);
               }
             }
           };
@@ -1688,19 +1784,40 @@ app.get('/', (req, res) => {
         if (shutdownBtn) {
           shutdownBtn.onclick = function() {
             console.log('Shutdown button clicked');
-            if (confirm('Are you sure you want to shut down the bot?')) {
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                const msg = {
-                  type: 'EXIT_BOT',
-                  client_id: clientId,
-                  timestamp: Date.now()
-                };
-                ws.send(JSON.stringify(msg));
-                console.log('Shutdown command sent');
-                alert('Shutdown command sent');
-              } else {
-                console.error('WebSocket not connected');
-                alert('Cannot shutdown: WebSocket not connected');
+            if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
+              try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  const msg = {
+                    type: 'EXIT_BOT',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                  };
+                  
+                  console.log('Sending shutdown command:', msg);
+                  ws.send(JSON.stringify(msg));
+                  
+                  // Add to logs
+                  const timestamp = new Date().toISOString();
+                  appState.logs.push({
+                    time: timestamp,
+                    message: 'Sent shutdown command to bot'
+                  });
+                  
+                  // Add to connection history
+                  appState.stats.connectionHistory.push({
+                    time: Date.now(),
+                    state: 'Shutdown Requested',
+                    reason: 'User initiated shutdown via API'
+                  });
+                  
+                  alert('Shutdown command sent. The bot will shut down shortly.');
+                } else {
+                  console.error('WebSocket not connected');
+                  alert('Cannot shutdown: WebSocket not connected');
+                }
+              } catch (error) {
+                console.error('Error sending shutdown command:', error);
+                alert('Error sending shutdown command: ' + error.message);
               }
             }
           };
@@ -1712,161 +1829,49 @@ app.get('/', (req, res) => {
             if (confirm('Are you sure you want to start the bot?')) {
               fetch('/api/admin/start', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
               })
-              .then(function(res) { return res.json(); })
+              .then(function(response) {
+                if (!response.ok) {
+                  throw new Error('HTTP error ' + response.status);
+                }
+                return response.json();
+              })
               .then(function(data) {
                 console.log('Start response:', data);
                 if (data.success) {
                   alert('Bot started with PID: ' + data.pid);
+                  
+                  // Update logs
+                  const timestamp = new Date().toISOString();
+                  appState.logs.push({
+                    time: timestamp,
+                    message: 'Bot started with PID: ' + data.pid
+                  });
+                  
+                  // Refresh the admin panel
+                  updateAdminPanel();
                 } else {
                   alert('Error: ' + (data.error || 'Unknown error'));
                 }
               })
-              .catch(function(err) {
-                console.error('Start error:', err);
-                alert('Error: ' + err.message);
+              .catch(function(error) {
+                console.error('Start error:', error);
+                alert('Error starting bot: ' + error.message);
               });
             }
           };
         }
       });
-      
-      // Add this API endpoint for starting the bot
-      app.post('/api/admin/start', (req, res) => {
-        try {
-          const { spawn } = require('child_process');
-          const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
-          
-          console.log('Attempting to start bot at path:', botPath);
-          
-          // Check if the bot file exists
-          if (!fs.existsSync(botPath)) {
-            console.error('Bot file not found:', botPath);
-            return res.status(404).json({ error: 'Bot file not found: ' + botPath });
-          }
-          
-          // Spawn the bot process
-          const botProcess = spawn('node', [botPath], {
-            detached: true,
-            stdio: 'ignore',
-            env: process.env
-          });
-          
-          // Unref the child process so it can run independently
-          botProcess.unref();
-          
-          console.log('Started bot process with PID:', botProcess.pid);
-          
-          // Add to logs array directly
-          const timestamp = new Date().toISOString();
-          if (Array.isArray(appState.logs)) {
-            appState.logs.push({
-              time: timestamp,
-              message: 'Started bot process with PID: ' + botProcess.pid
-            });
-          }
-          
-          // Add to connection history directly
-          if (Array.isArray(appState.stats.connectionHistory)) {
-            appState.stats.connectionHistory.push({
-              time: Date.now(),
-              state: 'Start Requested',
-              reason: 'User initiated start'
-            });
-            
-            // Keep history to a reasonable size
-            if (appState.stats.connectionHistory.length > 100) {
-              appState.stats.connectionHistory.shift();
-            }
-          }
-          
-          res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
-        } catch (error) {
-          console.error('Error starting bot:', error);
-          
-          // Add error to logs array directly
-          const timestamp = new Date().toISOString();
-          if (Array.isArray(appState.logs)) {
-            appState.logs.push({
-              time: timestamp,
-              message: 'Error starting bot: ' + error.message
-            });
-          }
-          
-          // Increment errors counter directly
-          if (appState && appState.stats) {
-            appState.stats.errors++;
-          }
-          
-          res.status(500).json({ error: error.message });
-        }
-      });
-      
-      // Add admin panel update to polling
-      setInterval(updateAdminPanel, 5000);
-      
-      // Initial admin panel update
-      updateAdminPanel();
     </script>
   </body>
   </html>
   `;
   
   res.send(html);
-});
-
-// Add these API endpoints for admin actions
-app.post('/api/admin/restart', (req, res) => {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    return res.status(503).json({ error: 'WebSocket is not connected' });
-  }
-  
-  try {
-    const restartMsg = {
-      type: 'RESTART_BOT',
-      client_id: clientId,
-      timestamp: Date.now()
-    };
-    
-    ws.send(JSON.stringify(restartMsg));
-    addLog('Sent restart command to bot');
-    
-    // Track the restart in connection history
-    trackConnectionState('Restart Requested', 'User initiated restart');
-    
-    res.json({ success: true, message: 'Restart command sent' });
-  } catch (error) {
-    addLog(`Error sending restart command: ${error.message}`);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/admin/shutdown', (req, res) => {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    return res.status(503).json({ error: 'WebSocket is not connected' });
-  }
-  
-  try {
-    const shutdownMsg = {
-      type: 'EXIT_BOT',
-      client_id: clientId,
-      timestamp: Date.now()
-    };
-    
-    ws.send(JSON.stringify(shutdownMsg));
-    addLog('Sent shutdown command to bot');
-    
-    // Track the shutdown in connection history
-    trackConnectionState('Shutdown Requested', 'User initiated shutdown');
-    
-    res.json({ success: true, message: 'Shutdown command sent' });
-  } catch (error) {
-    addLog(`Error sending shutdown command: ${error.message}`);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // Start the server
