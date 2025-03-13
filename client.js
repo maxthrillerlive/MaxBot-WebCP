@@ -54,10 +54,24 @@ class BotClient {
         this.ws.on('message', (data) => {
             try {
                 const message = JSON.parse(data);
+                
+                // Handle D-Bus messages
+                if (message.type === 'dbus-message') {
+                    const { sender, message: content, timestamp } = message.data;
+                    this.ui.logToConsole(`{magenta-fg}[D-Bus] ${sender}:{/magenta-fg} ${content}`);
+                    this.ui.screen.render();
+                }
+                
+                // Handle D-Bus notifications
+                if (message.type === 'dbus-notification') {
+                    const { title, body, timestamp } = message.data;
+                    this.ui.logToConsole(`{magenta-fg}[Notification] ${title}:{/magenta-fg} ${body}`);
+                    this.ui.screen.render();
+                }
+                
                 this.handleMessage(message);
-            } catch (err) {
-                console.error('Error parsing message:', err);
-                this.ui.logToConsole(`{red-fg}Error parsing message: ${err.message}{/red-fg}`);
+            } catch (error) {
+                console.error('Error processing message:', error);
             }
         });
 
@@ -322,6 +336,15 @@ class BotClient {
             });
         } catch (error) {
             return false;
+        }
+    }
+
+    sendDBusMessage(sender, content) {
+        if (this.isConnected) {
+            this.ws.send(JSON.stringify({
+                type: 'send-dbus-message',
+                data: { sender, content }
+            }));
         }
     }
 }
