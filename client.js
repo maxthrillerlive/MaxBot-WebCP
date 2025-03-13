@@ -8,19 +8,34 @@ class BotClient {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 1000;
+        this.connectionState = 'disconnected';
+        this.restartInProgress = false;
         this.ui = new BotUI(this);
         this.connect();
     }
 
     connect() {
         const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+        
+        // Don't try to connect if we're already connecting
+        if (this.connectionState === 'connecting') return;
+        
+        this.connectionState = 'connecting';
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
             this.isConnected = true;
+            this.connectionState = 'connected';
             this.reconnectAttempts = 0;
+            this.reconnectDelay = 1000;
             this.requestStatus();
             this.ui.logToConsole('{green-fg}Connected to bot server{/green-fg}');
+            
+            // If we were in the middle of a restart, clear that state
+            if (this.restartInProgress) {
+                this.restartInProgress = false;
+                this.ui.logToConsole('{green-fg}Bot restart completed successfully{/green-fg}');
+            }
         });
 
         this.ws.on('message', (data) => {
@@ -35,8 +50,13 @@ class BotClient {
 
         this.ws.on('close', () => {
             this.isConnected = false;
-            this.ui.logToConsole('{red-fg}Disconnected from bot server{/red-fg}');
-            this.handleReconnect();
+            this.connectionState = 'disconnected';
+            
+            // Only show disconnection message if we weren't expecting it
+            if (!this.restartInProgress) {
+                this.ui.logToConsole('{red-fg}Disconnected from bot server{/red-fg}');
+                this.handleReconnect();
+            }
         });
 
         this.ws.on('error', (error) => {
@@ -72,7 +92,7 @@ class BotClient {
     }
 
     handleReconnect() {
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (this.reconnectAttempts < this.maxReconnectAttempts && !this.restartInProgress) {
             this.reconnectAttempts++;
             const message = `{yellow-fg}Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}{/yellow-fg}`;
             this.ui.logToConsole(message);
@@ -83,7 +103,7 @@ class BotClient {
             const delay = baseDelay + jitter;
             
             setTimeout(() => this.connect(), delay);
-        } else {
+        } else if (!this.restartInProgress) {
             const message = '{red-fg}Max reconnection attempts reached. Please restart the application.{/red-fg}';
             this.ui.logToConsole(message);
         }
@@ -126,6 +146,12 @@ class BotClient {
                     this.ui.processChatMessage(chatMsg);
                     break;
                 case 'CONNECTION_STATE':
+                    if (message.state === 'restarting') {
+                        this.restartInProgress = true;
+                        this.ui.logToConsole('{yellow-fg}Bot restarting{/yellow-fg}');
+                    } else {
+                        this.ui.updateConnectionState(message.state);
+                    }
                     this.ui.logToConsole(`Bot ${message.state}`);
                     break;
                 case 'ERROR':
@@ -176,8 +202,18 @@ class BotClient {
 
     restartBot() {
         if (this.isConnected) {
+            this.restartInProgress = true;
+            this.ui.logToConsole('{yellow-fg}Restarting bot...{/yellow-fg}');
             this.send({ type: 'RESTART_BOT' });
             this.ui.logToConsole('Restart command sent to bot');
+            
+            // Set a timeout to clear the restart flag if it takes too long
+            setTimeout(() => {
+                if (this.restartInProgress) {
+                    this.restartInProgress = false;
+                    this.ui.logToConsole('{red-fg}Restart timed out. Please check the bot server.{/red-fg}');
+                }
+            }, 30000); // 30 second timeout
         } else {
             this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
         }
@@ -185,6 +221,7 @@ class BotClient {
 
     exitBot() {
         if (this.isConnected) {
+            this.ui.logToConsole('{yellow-fg}Shutting down bot...{/yellow-fg}');
             this.send({ type: 'EXIT_BOT' });
             this.ui.logToConsole('Shutdown command sent to bot');
             
