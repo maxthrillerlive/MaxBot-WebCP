@@ -9,6 +9,16 @@ const path = require('path');
 const BotUI = require('../ui');
 const BotClient = require('../client');
 
+// Helper function to safely create timestamps
+function safeTimestamp() {
+  try {
+    return Date.now();
+  } catch (e) {
+    console.error(`Error creating timestamp: ${e.message}`);
+    return 0;
+  }
+}
+
 // Create a PID file to store the current process ID
 const createPidFile = () => {
     try {
@@ -53,15 +63,19 @@ console.log('Starting MaxBot TUI...');
 createPidFile();
 
 // Set up safety timeout
-console.log('Setting up safety timeout (15 seconds)');
+console.log('Setting up safety timeout (60 seconds)');
 const safetyTimeout = setTimeout(() => {
     console.log('Safety timeout reached, forcing exit');
     process.exit(0);
-}, 15000);
+}, 60000); // Increased to 60 seconds for more testing time
+
+// Global variables for UI and client
+let ui;
+let client;
 
 try {
     // Create and initialize the UI
-    const ui = new BotUI();
+    ui = new BotUI();
     console.log('UI instance created: Success');
     
     // Set up the screen
@@ -76,7 +90,8 @@ try {
     console.log('TUI setup complete');
     
     // Create the client
-    global.client = new BotClient(ui);
+    client = new BotClient(ui);
+    global.client = client; // Make client globally accessible
     console.log('BotClient constructor called with UI: UI provided');
     console.log('BotClient initialized, deferring Fedora integration');
     console.log('Client created with UI');
@@ -94,7 +109,21 @@ try {
     ui.screen.key(['escape', 'q', 'C-c'], function() {
         clearTimeout(safetyTimeout);
         console.log('Exit key pressed');
-        process.exit(0);
+        
+        // Ensure WebSocket is closed before exiting
+        if (client && client.ws && client.ws.readyState === 1) {
+            console.log('Closing WebSocket connection...');
+            try {
+                client.ws.close();
+            } catch (e) {
+                console.error('Error closing WebSocket:', e);
+            }
+        }
+        
+        // Force exit after a short delay to allow cleanup
+        setTimeout(() => {
+            process.exit(0);
+        }, 500);
     });
     
     // Set up a click handler for the admin panel if it exists
@@ -102,7 +131,21 @@ try {
         ui.adminBox.on('click', function() {
             clearTimeout(safetyTimeout);
             console.log('Admin panel clicked, exiting...');
-            process.exit(0);
+            
+            // Ensure WebSocket is closed before exiting
+            if (client && client.ws && client.ws.readyState === 1) {
+                console.log('Closing WebSocket connection...');
+                try {
+                    client.ws.close();
+                } catch (e) {
+                    console.error('Error closing WebSocket:', e);
+                }
+            }
+            
+            // Force exit after a short delay to allow cleanup
+            setTimeout(() => {
+                process.exit(0);
+            }, 500);
         });
     }
     
@@ -174,10 +217,22 @@ function setupConsoleOverride(client) {
 }
 
 // Start the client with console override
-const originalConsole = setupConsoleOverride(global.client);
+const originalConsole = setupConsoleOverride(client);
+
+// Set up a periodic check to ensure the application can exit
+const exitCheck = setInterval(() => {
+    console.log('Checking application state...');
+    // This helps keep the event loop active and allows the safety timeout to work
+}, 5000);
+
+// Clear the interval on exit
+process.on('exit', () => {
+    clearInterval(exitCheck);
+    clearTimeout(safetyTimeout);
+});
 
 // Export the UI and client for debugging
 module.exports = {
     ui,
-    client: global.client
+    client
 };

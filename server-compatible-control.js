@@ -11,27 +11,56 @@ const pidFile = path.join(__dirname, 'maxbot-tui.pid');
 fs.writeFileSync(pidFile, process.pid.toString());
 console.log(`PID file created at ${pidFile}`);
 
+// Helper function to safely create timestamps
+function safeTimestamp() {
+  try {
+    return Date.now();
+  } catch (e) {
+    addLog(`Error creating timestamp: ${e.message}`);
+    return 0;
+  }
+}
+
+// Helper function to safely create ISO date strings
+function safeISOString(timestamp) {
+  try {
+    // Ensure timestamp is a valid number
+    if (typeof timestamp !== 'number' || isNaN(timestamp) || !isFinite(timestamp)) {
+      return new Date().toISOString(); // Use current time as fallback
+    }
+    return new Date(timestamp).toISOString();
+  } catch (e) {
+    addLog(`Error creating ISO string: ${e.message}`);
+    return new Date().toISOString(); // Use current time as fallback
+  }
+}
+
 // Initialize application state
 const appState = {
   running: true,
   wsStatus: 'Disconnected',
   wsMessages: 0,
   reconnectAttempts: 0,
-  lastPingTime: 0,
-  lastStatusTime: 0,
+  lastPingTime: safeTimestamp(),
+  lastStatusTime: safeTimestamp(),
   serverErrors: [],
   logs: []
 };
 
-// Add log message
+// Add log with safe timestamp
 function addLog(message) {
-  const timestamp = new Date().toISOString();
-  const logEntry = `[${timestamp}] ${message}`;
-  console.log(logEntry);
-  appState.logs.push(logEntry);
+  const timestamp = safeTimestamp();
+  const logEntry = {
+    time: timestamp,
+    timeString: safeISOString(timestamp),
+    message: message
+  };
   
-  // Keep only the last 100 logs
-  if (appState.logs.length > 100) {
+  appState.logs.push(logEntry);
+  console.log(`[${logEntry.timeString}] ${message}`);
+  
+  // Keep logs to a reasonable size
+  if (appState.logs.length > 1000) {
     appState.logs.shift();
   }
 }
@@ -101,11 +130,11 @@ function connectToWebSocket() {
       // Wait a short time before sending the first message
       setTimeout(() => {
         try {
-          // Send a status request instead of ping
+          // Send a status request
           const statusRequest = {
             type: 'GET_STATUS',
             client_id: clientId,
-            timestamp: Date.now()
+            timestamp: safeTimestamp() // Use safe timestamp
           };
           
           ws.send(JSON.stringify(statusRequest));
@@ -115,7 +144,7 @@ function connectToWebSocket() {
         }
       }, 500);
       
-      // Set up a status request interval instead of ping
+      // Set up a status request interval
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
@@ -123,15 +152,16 @@ function connectToWebSocket() {
             const statusRequest = {
               type: 'GET_STATUS',
               client_id: clientId,
-              timestamp: Date.now()
+              timestamp: safeTimestamp() // Use safe timestamp
             };
             
             ws.send(JSON.stringify(statusRequest));
-            appState.lastPingTime = Date.now();
+            appState.lastPingTime = safeTimestamp(); // Use safe timestamp
             addLog('Sent periodic status request');
             
             // Check if we've received a response for the last request
-            if (appState.lastPingTime - appState.lastStatusTime > 30000 && appState.lastStatusTime !== 0) {
+            const currentTime = safeTimestamp();
+            if (currentTime - appState.lastStatusTime > 30000 && appState.lastStatusTime !== 0) {
               addLog('No status response received for 30 seconds, reconnecting');
               clearInterval(pingInterval);
               try {
@@ -150,7 +180,7 @@ function connectToWebSocket() {
           addLog('WebSocket not open, clearing status interval');
           clearInterval(pingInterval);
         }
-      }, 30000); // Send a status request every 30 seconds (less frequent to reduce load)
+      }, 30000); // Send a status request every 30 seconds
     });
     
     ws.on('message', (data) => {
@@ -176,7 +206,7 @@ function connectToWebSocket() {
             addLog('This appears to be a status message, handling as STATUS type');
             // Store the status information if needed
             appState.wsMessages++;
-            appState.lastStatusTime = Date.now(); // Update last status time
+            appState.lastStatusTime = safeTimestamp(); // Use safe timestamp
             return;
           }
           
@@ -189,7 +219,7 @@ function connectToWebSocket() {
         switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
           case 'STATUS':
             addLog(`Received status update`);
-            appState.lastStatusTime = Date.now(); // Update last status time
+            appState.lastStatusTime = safeTimestamp(); // Use safe timestamp
             break;
             
           case 'COMMANDS':
@@ -207,7 +237,7 @@ function connectToWebSocket() {
           case 'ERROR':
             addLog(`Received error from server: ${message.error || 'Unknown error'}`);
             appState.serverErrors.push({
-              time: new Date().toISOString(),
+              time: safeISOString(safeTimestamp()), // Use safe ISO string
               error: message.error || 'Unknown error'
             });
             break;
@@ -241,7 +271,7 @@ function connectToWebSocket() {
       addLog(`WebSocket error: ${error.message}`);
       appState.wsStatus = 'Error';
       appState.serverErrors.push({
-        time: new Date().toISOString(),
+        time: safeISOString(safeTimestamp()), // Use safe ISO string
         error: error.message
       });
       
@@ -253,7 +283,7 @@ function connectToWebSocket() {
     addLog(`Error creating WebSocket: ${error.message}`);
     appState.wsStatus = 'Error';
     appState.serverErrors.push({
-      time: new Date().toISOString(),
+      time: safeISOString(safeTimestamp()), // Use safe ISO string
       error: error.message
     });
     
@@ -284,7 +314,7 @@ function sendCommand(command, data = {}) {
       type: command,
       client_id: clientId,
       data: data,
-      timestamp: Date.now()
+      timestamp: safeTimestamp() // Use safe timestamp
     };
     
     ws.send(JSON.stringify(message));
@@ -318,7 +348,7 @@ const server = http.createServer((req, res) => {
           const exitMessage = {
             type: 'disconnect',
             client_id: clientId,
-            timestamp: Date.now()
+            timestamp: safeTimestamp() // Use safe timestamp
           };
           ws.send(JSON.stringify(exitMessage));
           addLog('Sent disconnect message');
@@ -343,16 +373,16 @@ const server = http.createServer((req, res) => {
     case '/status':
       const status = {
         pid: process.pid,
-        uptime: Math.floor((Date.now() - appState.startTime) / 1000),
+        uptime: Math.floor((safeTimestamp() - appState.startTime) / 1000),
         memory: process.memoryUsage(),
         wsStatus: appState.wsStatus,
         wsMessages: appState.wsMessages,
         reconnectAttempts: appState.reconnectAttempts,
-        lastPing: appState.lastPingTime ? new Date(appState.lastPingTime).toISOString() : null,
-        lastPong: appState.lastPongTime ? new Date(appState.lastPongTime).toISOString() : null,
+        lastPing: appState.lastPingTime ? safeISOString(appState.lastPingTime) : null,
+        lastPong: appState.lastPongTime ? safeISOString(appState.lastPongTime) : null,
         clientId: clientId,
         serverErrors: appState.serverErrors,
-        timestamp: new Date().toISOString()
+        timestamp: safeISOString(safeTimestamp()) // Use safe ISO string
       };
       
       res.setHeader('Content-Type', 'application/json');
@@ -373,7 +403,7 @@ const server = http.createServer((req, res) => {
             const disconnectMessage = {
               type: 'disconnect',
               client_id: clientId,
-              timestamp: Date.now()
+              timestamp: safeTimestamp() // Use safe timestamp
             };
             ws.send(JSON.stringify(disconnectMessage));
             addLog('Sent disconnect message');
@@ -512,13 +542,13 @@ const server = http.createServer((req, res) => {
           <div class="info">
             <p>Process ID: ${process.pid}</p>
             <p>Client ID: ${clientId}</p>
-            <p>Uptime: ${Math.floor((Date.now() - appState.startTime) / 1000)} seconds</p>
-            <p>Started at: ${new Date(appState.startTime).toISOString()}</p>
+            <p>Uptime: ${Math.floor((safeTimestamp() - appState.startTime) / 1000)} seconds</p>
+            <p>Started at: ${safeISOString(appState.startTime)}</p>
             <p>WebSocket Status: <span class="status-${appState.wsStatus.toLowerCase()}">${appState.wsStatus}</span></p>
             <p>WebSocket Messages Received: ${appState.wsMessages}</p>
             <p>Reconnect Attempts: ${appState.reconnectAttempts}</p>
-            <p>Last Ping: ${appState.lastPingTime ? new Date(appState.lastPingTime).toISOString() : 'Never'}</p>
-            <p>Last Pong: ${appState.lastPongTime ? new Date(appState.lastPongTime).toISOString() : 'Never'}</p>
+            <p>Last Ping: ${appState.lastPingTime ? safeISOString(appState.lastPingTime) : 'Never'}</p>
+            <p>Last Pong: ${appState.lastPongTime ? safeISOString(appState.lastPongTime) : 'Never'}</p>
           </div>
           
           <div>
@@ -555,7 +585,7 @@ const server = http.createServer((req, res) => {
           
           <h2>Application Logs</h2>
           <div class="logs">
-            ${appState.logs.map(log => `<p class="log-entry">${log}</p>`).join('')}
+            ${appState.logs.map(log => `<p class="log-entry">${log.message}</p>`).join('')}
           </div>
         </body>
         </html>
