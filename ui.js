@@ -1,6 +1,6 @@
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
-const StatusPanel = require('./panels/statusPanel');
+// const StatusPanel = require('./panels/statusPanel');
 
 class BotUI {
     constructor() {
@@ -26,9 +26,9 @@ class BotUI {
             });
             
             // Set key bindings
-            this.screen.key(['escape', 'q', 'C-c'], () => {
-                this.exit();
-                return process.exit(0);
+            this.screen.key(['escape', 'q', 'C-c', 'x', 'X'], () => {
+                console.log('Exit key pressed');
+                process.exit(0);
             });
             
             // Create the grid layout
@@ -38,8 +38,23 @@ class BotUI {
                 screen: this.screen
             });
             
-            // Create only the status panel
-            this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
+            // Replace the StatusPanel with a simple box
+            // this.statusPanel = new StatusPanel(this.grid, 0, 0, 3, 12);
+            this.statusBox = this.grid.set(0, 0, 3, 12, blessed.box, {
+                label: ' Bot Status (Disabled) ',
+                tags: true,
+                content: '{center}Status panel is disabled{/center}',
+                border: {
+                    type: 'line',
+                    fg: 'gray'
+                },
+                style: {
+                    fg: 'gray',
+                    border: {
+                        fg: 'gray'
+                    }
+                }
+            });
             
             // Keep the existing panels for compatibility, but don't create new ones
             this.commandBox = this.grid.set(3, 0, 3, 12, blessed.box, {
@@ -74,76 +89,41 @@ class BotUI {
                 }
             });
             
-            // Create admin panel with exit option
-            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' Admin Panel ',
+            // Replace the admin box with a simpler exit button
+            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.button, {
+                label: ' Exit Application ',
+                content: '{center}Click here to exit{/center}',
                 tags: true,
-                content: '{center}{bold}Press Enter to select an option{/bold}{/center}\n\n' +
-                         '{center}{red-fg}[Exit Control Panel]{/red-fg}{/center}\n\n' +
-                         '{center}Or press X to exit directly{/center}',
                 border: {
                     type: 'line',
-                    fg: 'cyan'
+                    fg: 'red'
                 },
                 style: {
                     fg: 'white',
+                    bg: 'red',
+                    focus: {
+                        bg: 'dark-red'
+                    },
+                    hover: {
+                        bg: 'dark-red'
+                    },
                     border: {
-                        fg: 'cyan'
+                        fg: 'red'
                     }
                 },
                 mouse: true,
                 keys: true,
-                clickable: true
+                vi: true
             });
             
-            // Add click handler for the exit option
-            this.adminBox.on('click', (data) => {
-                // Check if the click is on the exit option (roughly line 3)
-                if (data.y === 3) {
-                    console.log('Exit option clicked');
-                    this.confirmExit();
-                }
+            // Add direct exit on press
+            this.adminBox.on('press', () => {
+                console.log('Exit button pressed');
+                process.exit(0);
             });
             
-            // Add a method to handle exit confirmation
-            this.confirmExit = () => {
-                const dialog = blessed.question({
-                    parent: this.screen,
-                    border: 'line',
-                    height: 'shrink',
-                    width: 'half',
-                    top: 'center',
-                    left: 'center',
-                    label: ' Confirm Exit ',
-                    tags: true,
-                    content: 'Are you sure you want to exit?',
-                    style: {
-                        fg: 'white',
-                        border: {
-                            fg: 'red'
-                        }
-                    }
-                });
-                
-                dialog.on('submit', (value) => {
-                    if (value) {
-                        console.log('Exit confirmed, shutting down');
-                        // Clean up resources
-                        if (this.statusPanel && typeof this.statusPanel.destroy === 'function') {
-                            this.statusPanel.destroy();
-                        }
-                        // Exit the process
-                        process.exit(0);
-                    } else {
-                        console.log('Exit cancelled');
-                        this.screen.render();
-                    }
-                });
-                
-                this.screen.append(dialog);
-                dialog.focus();
-                this.screen.render();
-            };
+            // Focus on the exit button
+            this.adminBox.focus();
             
             // Mark as initialized
             this.initialized = true;
@@ -224,33 +204,8 @@ class BotUI {
 
     // Update status display
     updateStatus(status) {
-        console.log('UI.updateStatus called with:', JSON.stringify(status));
-        
-        // Direct panel content update as a fallback
-        if (this.statusPanel && this.statusPanel.panel) {
-            try {
-                // Try the panel's updateStatus method
-                this.statusPanel.updateStatus(status);
-            } catch (error) {
-                console.error('Error calling statusPanel.updateStatus:', error);
-                
-                // Fallback: update content directly
-                try {
-                    this.statusPanel.panel.setContent(
-                        `Status: ${status.connected ? 'Connected' : 'Disconnected'}\n` +
-                        `Channel: ${status.channel || 'Unknown'}\n` +
-                        `Uptime: ${status.uptime || 0}s`
-                    );
-                } catch (directError) {
-                    console.error('Error updating panel content directly:', directError);
-                }
-            }
-            
-            // Force render
-            this.screen.render();
-        } else {
-            console.log('Status panel not available');
-        }
+        console.log('Status update ignored - panel is disabled');
+        // Do nothing since status panel is disabled
     }
 
     // Update command list
@@ -267,13 +222,7 @@ class BotUI {
     // Add an exit method to clean up resources
     exit() {
         console.log('Exiting MaxBot TUI...');
-        
-        // Clean up status panel
-        if (this.statusPanel && typeof this.statusPanel.destroy === 'function') {
-            this.statusPanel.destroy();
-        }
-        
-        // Clean up other resources as needed
+        // No need to clean up the status panel since it's disabled
     }
 }
 
