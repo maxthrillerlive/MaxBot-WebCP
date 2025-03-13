@@ -35,6 +35,60 @@ class StatusPanel {
       console.log('Timer tick - updating status');
       this.updateStatus();
     }, 1000);
+
+    // Add this before creating the admin button
+    this.messageBox = this.grid.set(8, 0, 1, 12, blessed.box, {
+      content: '{center}Press X, Q, Escape, or Ctrl+C to exit, or click the button below{/center}',
+      tags: true,
+      style: {
+        fg: 'yellow'
+      }
+    });
+
+    // Replace it with this button implementation:
+    this.adminBox = this.grid.set(9, 0, 3, 12, blessed.button, {
+      label: ' Admin Panel ',
+      content: 'Exit Application',
+      tags: true,
+      border: {
+        type: 'line',
+        fg: 'red'
+      },
+      style: {
+        fg: 'white',
+        bg: 'red',
+        focus: {
+          bg: 'dark-red'
+        },
+        hover: {
+          bg: 'dark-red'
+        },
+        border: {
+          fg: 'red'
+        }
+      },
+      mouse: true,
+      keys: true,
+      vi: true
+    });
+
+    // Add this right after creating the button
+    this.adminBox.on('press', () => {
+      console.log('Exit button pressed');
+      process.exit(0);
+    });
+
+    // Add these key bindings after creating the screen
+    this.screen.key(['x', 'X', 'q', 'Q', 'escape', 'C-c'], () => {
+      console.log('Exit key pressed');
+      process.exit(0);
+    });
+
+    // Add this after creating all UI elements
+    this.adminBox.focus();
+
+    // Add this at the end of your setupScreen method
+    this.screen.render();
   }
   
   updateStatus() {
