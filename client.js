@@ -335,23 +335,9 @@ class BotClient extends EventEmitter {
     }
 
     requestStatus() {
-        if (this.isConnected) {
-            console.log('Requesting status update from server');
-            try {
-                // Try different message formats that the server might expect
-                
-                // Option 1: Simple 'status' request
-                this.ws.send(JSON.stringify({
-                    type: 'status'
-                }));
-                
-                // If that doesn't work, we can try other formats in the future
-            } catch (error) {
-                console.error('Error requesting status:', error);
-            }
-        } else {
-            console.log('Cannot request status: not connected');
-        }
+        // The server doesn't support explicit status requests
+        // Don't send any requests that will cause errors
+        console.log('Not sending status request - server does not support it');
     }
 
     requestCommands() {
