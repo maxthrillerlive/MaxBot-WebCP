@@ -1156,52 +1156,62 @@ app.get('/', (req, res) => {
       // Update chat
       function updateChat() {
         fetch('/api/chat?count=100')
-          .then(response => response.json())
-          .then(data => {
+          .then(function(response) {
+            return response.json();
+          })
+          .then(function(chatMessages) {
+            // Clear the container
             chatContainer.innerHTML = '';
-            data.forEach(item => {
+            
+            // Loop through each message
+            for (let i = 0; i < chatMessages.length; i++) {
+              const entry = chatMessages[i];
+              
+              // Create chat entry
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
-              // Create a single line for the entire chat message
+              // Create chat line
               const chatLine = document.createElement('div');
-              chatLine.className = 'chat-line';
               chatLine.style.fontSize = '18px';
               chatLine.style.lineHeight = '1.4';
               chatLine.style.display = 'flex';
               chatLine.style.flexWrap = 'wrap';
               chatLine.style.alignItems = 'center';
               
-              // Add timestamp at the beginning
+              // Create timestamp
               const timeSpan = document.createElement('span');
               timeSpan.style.color = '#888';
               timeSpan.style.marginRight = '8px';
               timeSpan.style.fontSize = '16px';
-              timeSpan.textContent = \`[${new Date(item.time).toLocaleTimeString()}]\`;
-              chatLine.appendChild(timeSpan);
+              timeSpan.textContent = '[' + new Date(entry.time).toLocaleTimeString() + ']';
               
-              // Add username with bold styling
+              // Create username
               const usernameSpan = document.createElement('span');
               usernameSpan.style.fontWeight = 'bold';
               usernameSpan.style.color = '#4CAF50';
               usernameSpan.style.marginRight = '8px';
               usernameSpan.style.fontSize = '18px';
-              usernameSpan.textContent = item.username;
-              chatLine.appendChild(usernameSpan);
+              usernameSpan.textContent = entry.username;
               
-              // Add message on the same line
+              // Create message
               const messageSpan = document.createElement('span');
               messageSpan.style.fontSize = '18px';
               messageSpan.style.wordBreak = 'break-word';
-              messageSpan.textContent = item.message;
-              chatLine.appendChild(messageSpan);
+              messageSpan.textContent = entry.message;
               
+              // Append elements
+              chatLine.appendChild(timeSpan);
+              chatLine.appendChild(usernameSpan);
+              chatLine.appendChild(messageSpan);
               chatEntry.appendChild(chatLine);
               chatContainer.appendChild(chatEntry);
-            });
+            }
+            
+            // Scroll to bottom
             chatContainer.scrollTop = chatContainer.scrollHeight;
           })
-          .catch(error => {
+          .catch(function(error) {
             console.error('Error fetching chat:', error);
           });
       }
