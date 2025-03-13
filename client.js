@@ -88,11 +88,28 @@ class BotClient extends EventEmitter {
                 this.statusInterval = setInterval(() => {
                     this.requestStatus();
                 }, 5000); // Request status every 5 seconds
+
+                // Set a default status if we don't receive one
+                setTimeout(() => {
+                    if (!this.botStatus.connected) {
+                        console.log('No status received, setting default status');
+                        const defaultStatus = {
+                            connected: true,
+                            channel: 'Unknown',
+                            uptime: 0,
+                            commands: []
+                        };
+                        this.handleStatusUpdate(defaultStatus);
+                    }
+                }, 3000);
             });
 
             this.ws.on('message', (data) => {
                 try {
+                    console.log('Received message from server:', data.toString().substring(0, 100) + '...');
                     const message = JSON.parse(data);
+                    
+                    console.log('Message type:', message.type);
                     
                     // Handle different message types
                     if (message.type === 'status') {
@@ -132,6 +149,8 @@ class BotClient extends EventEmitter {
                         
                         this.safeLog(formattedMessage);
                         this.emit('log', message.data);
+                    } else {
+                        console.log('Unknown message type:', message.type);
                     }
                     
                     // Render the screen if UI is available
@@ -161,6 +180,12 @@ class BotClient extends EventEmitter {
                 // Render the screen if UI is available
                 if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
                     this.ui.screen.render();
+                }
+                
+                // Clear the status interval
+                if (this.statusInterval) {
+                    clearInterval(this.statusInterval);
+                    this.statusInterval = null;
                 }
             });
 
