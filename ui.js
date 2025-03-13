@@ -73,6 +73,7 @@ class BotUI {
             label: ' Admin Panel ',
             tags: true,
             items: [
+                '{blue-fg}Start Bot{/blue-fg}',
                 '{green-fg}Restart Bot{/green-fg}',
                 '{red-fg}Shutdown Bot{/red-fg}',
                 '{yellow-fg}Clear Console{/yellow-fg}'
@@ -208,7 +209,13 @@ class BotUI {
         // Handle admin panel selection
         this.adminBox.on('select', async (item) => {
             const action = item.content;
-            if (action.includes('Restart Bot')) {
+            if (action.includes('Start Bot')) {
+                const confirm = await this.showConfirmDialog('Are you sure you want to start the bot?');
+                if (confirm) {
+                    this.logToConsole('{blue-fg}Starting bot...{/blue-fg}');
+                    this.client.startBot();
+                }
+            } else if (action.includes('Restart Bot')) {
                 const confirm = await this.showConfirmDialog('Are you sure you want to restart the bot?');
                 if (confirm) {
                     this.logToConsole('{yellow-fg}Restarting bot...{/yellow-fg}');

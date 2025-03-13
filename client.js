@@ -21,9 +21,22 @@ class BotClient {
         if (this.connectionState === 'connecting') return;
         
         this.connectionState = 'connecting';
+        this.ui.logToConsole('{yellow-fg}Connecting to bot server...{/yellow-fg}');
+        
         this.ws = new WebSocket(wsUrl);
 
+        // Set a connection timeout
+        const connectionTimeout = setTimeout(() => {
+            if (this.connectionState === 'connecting') {
+                this.ws.terminate();
+                this.connectionState = 'disconnected';
+                this.ui.logToConsole('{red-fg}Connection attempt timed out{/red-fg}');
+                this.handleReconnect();
+            }
+        }, 5000);
+
         this.ws.on('open', () => {
+            clearTimeout(connectionTimeout);
             this.isConnected = true;
             this.connectionState = 'connected';
             this.reconnectAttempts = 0;
@@ -237,6 +250,48 @@ class BotClient {
             this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
             // Exit anyway since we're not connected
             setTimeout(() => process.exit(0), 500);
+        }
+    }
+
+    startBot() {
+        // Check if we're already connected
+        if (this.isConnected) {
+            this.ui.logToConsole('{yellow-fg}Bot is already running{/yellow-fg}');
+            return;
+        }
+        
+        // Try to start the bot using child_process
+        try {
+            const { spawn } = require('child_process');
+            const path = require('path');
+            
+            // Get the bot directory (assuming it's in a parallel directory)
+            const botDir = path.resolve(__dirname, '../MaxBot');
+            
+            // Command to start the bot
+            this.ui.logToConsole('{blue-fg}Attempting to start bot...{/blue-fg}');
+            
+            // Spawn the bot process
+            const botProcess = spawn('npm', ['start'], {
+                cwd: botDir,
+                detached: true,
+                stdio: 'ignore',
+                shell: true
+            });
+            
+            // Unref the child process so it can run independently
+            botProcess.unref();
+            
+            this.ui.logToConsole('{blue-fg}Bot process started. Attempting to connect...{/blue-fg}');
+            
+            // Try to connect after a short delay
+            setTimeout(() => {
+                this.connect();
+            }, 3000);
+            
+        } catch (error) {
+            this.ui.logToConsole(`{red-fg}Failed to start bot: ${error.message}{/red-fg}`);
+            console.error('Error starting bot:', error);
         }
     }
 }
