@@ -1159,14 +1159,14 @@ app.get('/', (req, res) => {
           .then(response => response.json())
           .then(messages => {
             chatContainer.innerHTML = '';
-            messages.forEach(msg => {
+            messages.forEach(message => {
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
               // Create a single line for the entire chat message
               const chatLine = document.createElement('div');
               chatLine.className = 'chat-line';
-              chatLine.style.fontSize = '18px'; // Directly set larger font size
+              chatLine.style.fontSize = '18px';
               chatLine.style.lineHeight = '1.4';
               chatLine.style.display = 'flex';
               chatLine.style.flexWrap = 'wrap';
@@ -1177,7 +1177,7 @@ app.get('/', (req, res) => {
               timeSpan.style.color = '#888';
               timeSpan.style.marginRight = '8px';
               timeSpan.style.fontSize = '16px';
-              timeSpan.textContent = \`[${new Date(msg.time).toLocaleTimeString()}]\`;
+              timeSpan.textContent = \`[${new Date(message.time).toLocaleTimeString()}]\`;
               chatLine.appendChild(timeSpan);
               
               // Add username with bold styling
@@ -1186,14 +1186,14 @@ app.get('/', (req, res) => {
               usernameSpan.style.color = '#4CAF50';
               usernameSpan.style.marginRight = '8px';
               usernameSpan.style.fontSize = '18px';
-              usernameSpan.textContent = msg.username;
+              usernameSpan.textContent = message.username;
               chatLine.appendChild(usernameSpan);
               
               // Add message on the same line
               const messageSpan = document.createElement('span');
               messageSpan.style.fontSize = '18px';
               messageSpan.style.wordBreak = 'break-word';
-              messageSpan.textContent = msg.message;
+              messageSpan.textContent = message.message;
               chatLine.appendChild(messageSpan);
               
               chatEntry.appendChild(chatLine);
