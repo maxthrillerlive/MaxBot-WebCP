@@ -16,6 +16,12 @@ class BotUI {
         this.client = null;
         
         console.log('Starting MaxBot TUI...');
+        
+        // Safety timeout to exit after 5 minutes
+        this.safetyTimeout = setTimeout(() => {
+            console.log('Safety timeout reached, exiting application');
+            process.exit(0);
+        }, 5 * 60 * 1000); // 5 minutes
     }
 
     setupScreen() {
