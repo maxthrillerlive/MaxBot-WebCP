@@ -2,6 +2,8 @@
 
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
+const fs = require('fs');
+const path = require('path');
 
 // Update the require paths to use the correct locations
 const BotUI = require('../ui');
@@ -120,3 +122,32 @@ process.on('unhandledRejection', (reason, promise) => {
     }
     console.error('Unhandled Rejection:', reason);
 });
+
+// Create a PID file to store the current process ID
+const createPidFile = () => {
+    try {
+        const pidFile = path.join(__dirname, '..', 'maxbot-tui.pid');
+        fs.writeFileSync(pidFile, process.pid.toString());
+        console.log(`PID file created at ${pidFile}`);
+        
+        // Remove the PID file when the process exits
+        process.on('exit', () => {
+            try {
+                if (fs.existsSync(pidFile)) {
+                    fs.unlinkSync(pidFile);
+                    console.log('PID file removed');
+                }
+            } catch (error) {
+                console.error('Error removing PID file:', error);
+            }
+        });
+        
+        return pidFile;
+    } catch (error) {
+        console.error('Error creating PID file:', error);
+        return null;
+    }
+};
+
+// Create the PID file
+createPidFile();
