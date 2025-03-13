@@ -536,22 +536,28 @@ app.post('/api/chat', (req, res) => {
   }
   
   try {
-    // Instead of using CHAT_COMMAND, use EXECUTE_COMMAND with a special format
-    // that tells the bot to send a message to the channel
+    // Use the actual channel from the bot's status if available
+    const targetChannel = channel || 
+                         (appState.stats.botChannels && appState.stats.botChannels.length > 0 ? 
+                          appState.stats.botChannels[0] : 
+                          process.env.CHANNEL_NAME || '#maxthriller');
+    
+    // Use EXECUTE_COMMAND type which is recognized by the server
     const commandMsg = {
       type: 'EXECUTE_COMMAND',
-      command: message, // The message itself becomes the command
-      channel: channel || process.env.CHANNEL_NAME || '#channel',
+      command: message,
+      channel: targetChannel, // Use the determined target channel
       client_id: clientId,
       timestamp: Date.now()
     };
     
+    addLog(`Sending message to channel: ${targetChannel}`);
     ws.send(JSON.stringify(commandMsg));
     appState.stats.messagesSent++;
     appState.stats.chatMessagesSent++;
     addLog(`Sent chat message: ${message}`);
     
-    res.json({ success: true, message: `Chat message sent` });
+    res.json({ success: true, message: `Chat message sent to ${targetChannel}` });
   } catch (error) {
     addLog(`Error sending chat message: ${error.message}`);
     appState.stats.errors++;
