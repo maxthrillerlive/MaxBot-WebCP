@@ -28,32 +28,24 @@ class StatusPanel {
     // Set initial status
     this.updateStatus();
     
-    // Update uptime every second
+    // Update status immediately
+    this.updateStatus();
+    
+    // Set up timer to update every second
     this.timer = setInterval(() => {
-      // Increment seconds
-      this.seconds++;
-      
-      // Handle minute rollover
-      if (this.seconds >= 60) {
-        this.seconds = 0;
-        this.minutes++;
-      }
-      
-      // Handle hour rollover
-      if (this.minutes >= 60) {
-        this.minutes = 0;
-        this.hours++;
-      }
-      
-      // Update the display
+      console.log('Timer tick - updating status');
       this.updateStatus();
     }, 1000);
   }
   
   updateStatus() {
     try {
-      // Format uptime
-      const uptimeStr = `${this.hours}h ${this.minutes}m ${this.seconds}s`;
+      // Use process.uptime() for accurate uptime tracking
+      const uptimeSeconds = Math.floor(process.uptime());
+      const hours = Math.floor(uptimeSeconds / 3600);
+      const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+      const seconds = uptimeSeconds % 60;
+      const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
       
       // Get memory usage
       const memoryUsage = process.memoryUsage();
