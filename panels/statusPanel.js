@@ -1,4 +1,4 @@
-// Update the StatusPanel class to fix uptime and reorder fields
+// Update the StatusPanel class to fix uptime calculation
 const blessed = require('blessed');
 
 class StatusPanel {
@@ -22,23 +22,25 @@ class StatusPanel {
     
     // Track start time for accurate uptime calculation
     this.startTime = Date.now();
+    this.uptimeSeconds = 0;
     
     // Set hardcoded status information
     this.setHardcodedStatus();
     
     // Update status every second to show it's working
-    setInterval(() => {
+    this.updateInterval = setInterval(() => {
+      // Increment uptime counter
+      this.uptimeSeconds++;
       this.setHardcodedStatus();
     }, 1000);
   }
   
   setHardcodedStatus() {
     try {
-      // Calculate uptime based on start time
-      const uptime = Math.floor((Date.now() - this.startTime) / 1000);
-      const hours = Math.floor(uptime / 3600);
-      const minutes = Math.floor((uptime % 3600) / 60);
-      const seconds = uptime % 60;
+      // Calculate uptime display
+      const hours = Math.floor(this.uptimeSeconds / 3600);
+      const minutes = Math.floor((this.uptimeSeconds % 3600) / 60);
+      const seconds = this.uptimeSeconds % 60;
       const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
       
       // Get memory usage
@@ -70,6 +72,13 @@ class StatusPanel {
   updateStatus(status) {
     // Ignore status updates from outside, use hardcoded values
     console.log('Ignoring external status update:', JSON.stringify(status));
+  }
+  
+  destroy() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
   }
 }
 

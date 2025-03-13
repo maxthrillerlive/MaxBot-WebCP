@@ -18,8 +18,8 @@ class BotUI {
             console.log('Setting up TUI screen...');
             
             // Create the screen
-        this.screen = blessed.screen({
-            smartCSR: true,
+            this.screen = blessed.screen({
+                smartCSR: true,
                 title: 'MaxBot TUI',
                 dockBorders: true,
                 fullUnicode: true
@@ -27,6 +27,7 @@ class BotUI {
             
             // Set key bindings
             this.screen.key(['escape', 'q', 'C-c'], () => {
+                this.exit();
                 return process.exit(0);
             });
             
@@ -49,7 +50,7 @@ class BotUI {
                     type: 'line',
                     fg: 'gray'
                 },
-            style: {
+                style: {
                     fg: 'gray',
                     border: {
                         fg: 'gray'
@@ -73,18 +74,42 @@ class BotUI {
                 }
             });
             
-            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' Admin Panel (Disabled) ',
+            // Create admin panel with exit option
+            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.list, {
+                label: ' Admin Panel ',
                 tags: true,
-                content: '{center}Admin panel is disabled{/center}',
+                items: [
+                    '{red-fg}Exit Control Panel{/red-fg}'
+                ],
                 border: {
                     type: 'line',
-                    fg: 'gray'
+                    fg: 'cyan'
                 },
                 style: {
-                    fg: 'gray',
+                    selected: {
+                        bg: 'cyan',
+                        fg: 'black'
+                    },
+                    item: {
+                        fg: 'white'
+                    },
                     border: {
-                        fg: 'gray'
+                        fg: 'cyan'
+                    }
+                },
+                keys: true,
+                vi: true,
+                mouse: true
+            });
+            
+            // Set up admin panel selection handler
+            this.adminBox.on('select', async (item) => {
+                const action = item.content;
+                if (action.includes('Exit Control Panel')) {
+                    const confirm = await this.showConfirmDialog('Are you sure you want to exit?');
+                    if (confirm) {
+                        this.exit();
+                        process.exit(0);
                     }
                 }
             });
@@ -98,7 +123,7 @@ class BotUI {
             
             // Set up a render interval to ensure the screen is updated
             setInterval(() => {
-        this.screen.render();
+                this.screen.render();
             }, 1000);
             
             console.log('TUI setup complete');
@@ -162,7 +187,7 @@ class BotUI {
             
             this.screen.append(dialog);
             dialog.focus();
-                this.screen.render();
+            this.screen.render();
         });
     }
 
@@ -206,6 +231,18 @@ class BotUI {
     // Check if UI is initialized
     isInitialized() {
         return this.initialized;
+    }
+
+    // Add an exit method to clean up resources
+    exit() {
+        console.log('Exiting MaxBot TUI...');
+        
+        // Clean up status panel
+        if (this.statusPanel && typeof this.statusPanel.destroy === 'function') {
+            this.statusPanel.destroy();
+        }
+        
+        // Clean up other resources as needed
     }
 }
 
