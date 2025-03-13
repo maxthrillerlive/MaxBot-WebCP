@@ -3,6 +3,10 @@ const BotUI = require('./ui');
 const EventEmitter = require('events');
 const fedora = require('./fedora');
 const config = require('./config');
+const dotenv = require('dotenv');
+
+// Load environment variables
+dotenv.config();
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_BASE = 2000;
@@ -30,6 +34,15 @@ class BotClient extends EventEmitter {
         
         // We'll initialize Fedora later when UI is ready
         console.log('BotClient initialized, deferring Fedora integration');
+        
+        if (ui) {
+            ui.setClient(this);
+            console.log('Client created with UI');
+        } else {
+            console.log('Client initialized, deferring UI integration');
+        }
+        
+        // Connect to the WebSocket server
         this.connectToServer();
     }
 
@@ -45,7 +58,11 @@ class BotClient extends EventEmitter {
     }
 
     connectToServer() {
-        const serverUrl = config.websocket.url;
+        // Get server URL from environment variables or use default
+        const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
+        const port = process.env.WEBSOCKET_PORT || '8080';
+        const serverUrl = `ws://${host}:${port}`;
+        
         console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
         try {

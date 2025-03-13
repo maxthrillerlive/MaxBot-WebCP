@@ -4,34 +4,31 @@ const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 
 // Update the require paths to use the correct locations
-const BotUI = require('../ui.js');
-const BotClient = require('../client.js');
+const BotUI = require('../ui');
+const BotClient = require('../client');
 
+// Start the application
 console.log('Starting MaxBot TUI...');
 
-// Create UI first and make sure it's properly initialized
-const ui = new BotUI();
-console.log('UI instance created:', ui ? 'Success' : 'Failed');
-
-// Setup the screen
-ui.setupScreen();
-console.log('Screen setup complete');
-
-// Create client with UI - pass the ui object explicitly
-const client = new BotClient(ui);
-console.log('Client created with UI');
-
-// Set client reference in UI
-ui.setClient(client);
-console.log('Client reference set in UI');
-
-// Connect to the bot server
-client.connect();
-console.log('Connection initiated');
-
-// Force render the screen
-ui.screen.render();
-console.log('Screen rendered');
+try {
+  // Create and initialize the UI
+  const ui = new BotUI();
+  console.log('UI instance created:', ui ? 'Success' : 'Failed');
+  
+  // Set up the screen
+  ui.setupScreen();
+  console.log('Screen setup complete');
+  
+  // Create the client and connect to the server
+  const client = new BotClient(ui);
+  console.log('Client created with UI');
+  
+  // No need to call client.connect() - it's already connecting in the constructor
+  
+} catch (error) {
+  console.error('Error starting application:', error);
+  process.exit(1);
+}
 
 // Override console methods to redirect to our UI
 function setupConsoleOverride(client) {
