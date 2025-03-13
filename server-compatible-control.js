@@ -689,23 +689,62 @@ app.get('/', (req, res) => {
         word-wrap: break-word;
       }
       
+      .chat-container {
+        flex: 1;
+        overflow-y: auto;
+        font-family: monospace;
+        background-color: #1a1a1a;
+        padding: 10px;
+        border-radius: 3px;
+        font-size: 18px; /* Significantly increased font size for chat */
+        line-height: 1.4;
+      }
+      
       .chat-entry {
-        margin-bottom: 8px;
+        margin-bottom: 12px;
         word-wrap: break-word;
+      }
+      
+      .chat-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+      }
+      
+      .chat-time {
+        color: #888;
+        font-size: 16px;
+        margin-right: 8px;
+        white-space: nowrap;
+      }
+      
+      .chat-badges {
+        display: inline-flex;
+        margin-right: 5px;
+        align-items: center;
+      }
+      
+      .chat-badge {
+        width: 20px; /* Slightly larger badges */
+        height: 20px;
+        margin-right: 3px;
+        border-radius: 3px;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
       }
       
       .chat-username {
         font-weight: bold;
         color: #4CAF50;
-      }
-      
-      .chat-time {
-        color: #888;
-        font-size: 0.8em;
+        font-size: 18px;
+        margin-right: 8px;
+        white-space: nowrap;
       }
       
       .chat-message {
-        margin-top: 2px;
+        font-size: 18px;
+        word-break: break-word;
       }
       
       .input-container {
@@ -1124,21 +1163,38 @@ app.get('/', (req, res) => {
               const chatEntry = document.createElement('div');
               chatEntry.className = 'chat-entry';
               
+              const chatLine = document.createElement('div');
+              chatLine.className = 'chat-line';
+              
+              // Add timestamp at the beginning
+              const timeSpan = document.createElement('span');
+              timeSpan.className = 'chat-time';
+              timeSpan.textContent = \`[${new Date(msg.time).toLocaleTimeString()}]\`;
+              chatLine.appendChild(timeSpan);
+              
               // Create badges container
               const badgesContainer = document.createElement('div');
               badgesContainer.className = 'chat-badges';
               
-              // Add badges based on the badges object
+              // Add badges based on username and badges object
+              if (msg.username.toLowerCase() === 'maxthriller') {
+                // Broadcaster badge
+                const broadcasterBadge = document.createElement('div');
+                broadcasterBadge.className = 'chat-badge badge-broadcaster';
+                broadcasterBadge.title = 'Broadcaster';
+                badgesContainer.appendChild(broadcasterBadge);
+              }
+              
+              if (msg.username.toLowerCase() === 'max2d2') {
+                // Bot badge
+                const botBadge = document.createElement('div');
+                botBadge.className = 'chat-badge badge-bot';
+                botBadge.title = 'Bot';
+                badgesContainer.appendChild(botBadge);
+              }
+              
+              // Add badges from the badges object if it exists
               if (msg.badges) {
-                // Process broadcaster badge
-                if (msg.badges.broadcaster) {
-                  const broadcasterBadge = document.createElement('div');
-                  broadcasterBadge.className = 'chat-badge badge-broadcaster';
-                  broadcasterBadge.title = 'Broadcaster';
-                  badgesContainer.appendChild(broadcasterBadge);
-                }
-                
-                // Process moderator badge
                 if (msg.badges.moderator) {
                   const modBadge = document.createElement('div');
                   modBadge.className = 'chat-badge badge-moderator';
@@ -1146,7 +1202,6 @@ app.get('/', (req, res) => {
                   badgesContainer.appendChild(modBadge);
                 }
                 
-                // Process VIP badge
                 if (msg.badges.vip) {
                   const vipBadge = document.createElement('div');
                   vipBadge.className = 'chat-badge badge-vip';
@@ -1154,50 +1209,30 @@ app.get('/', (req, res) => {
                   badgesContainer.appendChild(vipBadge);
                 }
                 
-                // Process subscriber badge
                 if (msg.badges.subscriber) {
                   const subBadge = document.createElement('div');
                   subBadge.className = 'chat-badge badge-subscriber';
                   subBadge.title = 'Subscriber';
                   badgesContainer.appendChild(subBadge);
                 }
-                
-                // Process premium badge
-                if (msg.badges.premium) {
-                  const premiumBadge = document.createElement('div');
-                  premiumBadge.className = 'chat-badge badge-premium';
-                  premiumBadge.title = 'Twitch Prime';
-                  badgesContainer.appendChild(premiumBadge);
-                }
               }
               
-              // Add bot badge for the bot's messages
-              if (msg.username.toLowerCase() === process.env.BOT_USERNAME?.toLowerCase() || 
-                  msg.username.toLowerCase() === 'max2d2') {
-                const botBadge = document.createElement('div');
-                botBadge.className = 'chat-badge badge-bot';
-                botBadge.title = 'Bot';
-                badgesContainer.appendChild(botBadge);
-              }
+              // Add badges to line
+              chatLine.appendChild(badgesContainer);
               
-              const chatHeader = document.createElement('div');
-              chatHeader.style.display = 'flex';
-              chatHeader.style.alignItems = 'center';
+              // Add username
+              const usernameSpan = document.createElement('span');
+              usernameSpan.className = 'chat-username';
+              usernameSpan.textContent = msg.username;
+              chatLine.appendChild(usernameSpan);
               
-              // Add badges to header
-              chatHeader.appendChild(badgesContainer);
+              // Add message on the same line
+              const messageSpan = document.createElement('span');
+              messageSpan.className = 'chat-message';
+              messageSpan.textContent = msg.message;
+              chatLine.appendChild(messageSpan);
               
-              // Add username and timestamp
-              const userTimeContainer = document.createElement('div');
-              userTimeContainer.innerHTML = \`<span class="chat-username">\${msg.username}</span> <span class="chat-time">[\${new Date(msg.time).toLocaleTimeString()}]</span>\`;
-              chatHeader.appendChild(userTimeContainer);
-              
-              const chatMessage = document.createElement('div');
-              chatMessage.className = 'chat-message';
-              chatMessage.textContent = msg.message;
-              
-              chatEntry.appendChild(chatHeader);
-              chatEntry.appendChild(chatMessage);
+              chatEntry.appendChild(chatLine);
               chatContainer.appendChild(chatEntry);
             });
             chatContainer.scrollTop = chatContainer.scrollHeight;
