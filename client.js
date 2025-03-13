@@ -41,9 +41,9 @@ class BotClient extends EventEmitter {
     }
 
     connect() {
-        console.log('BotClient.connect called, UI status:', 
-            this.ui ? (this.ui.isInitialized() ? 'UI initialized' : 'UI not initialized') : 'No UI');
-        const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+        // Hardcode the WebSocket URL to the correct IP address
+        const wsUrl = 'ws://192.168.1.122:8080';
+        console.log('Connecting to WebSocket server at:', wsUrl);
         
         // Don't try to connect if we're already connecting
         if (this.connectionState === 'connecting') return;
