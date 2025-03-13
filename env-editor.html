@@ -129,13 +129,13 @@
       <p class="warning-text">⚠️ After saving, you'll need to restart the bot for changes to take effect.</p>
     </div>
     
-    <a href="/" class="back-link">← Return to Control Panel</a>
+    <a href="javascript:history.back()" class="back-link">← Return to Control Panel</a>
   </div>
 
   <script>
     // Function to load environment variables
     function loadEnvVariables() {
-      fetch('/api/admin/env')
+      fetch('/api/env')
         .then(response => response.json())
         .then(data => {
           if (data.content) {
@@ -152,7 +152,7 @@
     function saveEnvVariables() {
       const envEditor = document.getElementById('env-editor');
       if (confirm('Are you sure you want to save these changes? This will update your bot configuration.')) {
-        fetch('/api/admin/env', {
+        fetch('/api/env', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
