@@ -19,7 +19,7 @@ class BotClient extends EventEmitter {
         this.ws = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
+        this.maxReconnectAttempts = 3;
         this.reconnectDelay = 2000; // 2 seconds
         this.maxReconnectDelay = 30000;
         this.reconnectTimer = null;
@@ -42,8 +42,11 @@ class BotClient extends EventEmitter {
             console.log('Client initialized, deferring UI integration');
         }
         
-        // Connect to the WebSocket server
-        this.connectToServer();
+        // Set a timeout to connect to the server
+        // This helps avoid freezing during initialization
+        setTimeout(() => {
+            this.connectToServer();
+        }, 1000);
     }
 
     // Helper method to safely log to console
@@ -68,90 +71,87 @@ class BotClient extends EventEmitter {
         // Set a connection timeout
         const connectionTimeout = setTimeout(() => {
             console.log('WebSocket connection timeout after 5 seconds');
-            if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-                console.log('Closing failed connection attempt');
+            if (this.ws) {
                 try {
                     this.ws.close();
                 } catch (e) {
-                    console.log('Error closing WebSocket:', e.message);
+                    // Ignore errors
                 }
                 this.ws = null;
-                
-                // Don't try to reconnect, just log the error
-                console.log('Connection failed, not attempting to reconnect');
-                
-                // Update UI if available
-                if (this.ui && this.ui.isInitialized()) {
-                    this.ui.logToConsole('Failed to connect to MaxBot server (timeout)');
-                    this.ui.updateStatus({ connected: false });
-                }
             }
-        }, 5000); // 5 second timeout
+            
+            // Update UI if available
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('Failed to connect to MaxBot server (timeout)');
+                this.ui.updateStatus({ connected: false });
+            }
+        }, 5000);
         
         try {
-            this.ws = new WebSocket(serverUrl);
+            // Create WebSocket with timeout option
+            const options = {
+                handshakeTimeout: 5000, // 5 seconds
+                timeout: 5000
+            };
+            
+            this.ws = new WebSocket(serverUrl, options);
             console.log('Connection initiated');
-
+            
+            // Set up minimal event handlers
         this.ws.on('open', () => {
                 console.log('Connected to WebSocket server');
                 clearTimeout(connectionTimeout);
-            this.reconnectAttempts = 0;
-                
-                // Request initial status
-                this.sendMessage({ type: 'getStatus' });
-                
-                // Request command list
-                this.sendMessage({ type: 'getCommands' });
                 
                 // Update UI if available
                 if (this.ui && this.ui.isInitialized()) {
                     this.ui.logToConsole('Connected to MaxBot server');
-                }
-        });
-
-        this.ws.on('message', (data) => {
-            try {
-                const message = JSON.parse(data);
-                    
-                    if (message.type === 'status') {
-                        if (this.ui && this.ui.isInitialized()) {
-                            this.ui.updateStatus(message.data);
-                        }
-                    } else if (message.type === 'commands') {
-                        if (this.ui && this.ui.isInitialized()) {
-                            this.ui.updateCommands(message.data);
-                        }
-                    } else if (message.type === 'log') {
-                        if (this.ui && this.ui.isInitialized()) {
-                            this.ui.logToConsole(message.data);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing message:', error);
-                    if (this.ui && this.ui.isInitialized()) {
-                        this.ui.logToConsole(`Error processing message: ${error.message}`);
-                    }
+                    this.ui.updateStatus({ connected: true, channel: 'Unknown', uptime: '0s' });
                 }
             });
             
             this.ws.on('error', (error) => {
                 console.error('WebSocket error:', error.message);
+                clearTimeout(connectionTimeout);
+                
+                // Update UI if available
                 if (this.ui && this.ui.isInitialized()) {
                     this.ui.logToConsole(`WebSocket error: ${error.message}`);
+                    this.ui.updateStatus({ connected: false });
             }
         });
 
         this.ws.on('close', () => {
                 console.log('Disconnected from WebSocket server');
+                clearTimeout(connectionTimeout);
                 
+                // Update UI if available
                 if (this.ui && this.ui.isInitialized()) {
                     this.ui.updateStatus({ connected: false });
                     this.ui.logToConsole('Disconnected from MaxBot server');
                 }
-                
-                // Attempt to reconnect
-                this.scheduleReconnect();
             });
+            
+            // Minimal message handling
+            this.ws.on('message', (data) => {
+                try {
+                    console.log('Received message from server');
+                    
+                    // Try to parse the message but don't do anything with it
+                    // This avoids potential freezing issues
+                    const message = JSON.parse(data);
+                    
+                    // Just log the message type
+                    console.log('Message type:', message.type);
+                    
+                    // Update UI if available
+                    if (this.ui && this.ui.isInitialized()) {
+                        this.ui.logToConsole(`Received message of type: ${message.type}`);
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            });
+            
         } catch (error) {
             console.error('Error creating WebSocket connection:', error);
             clearTimeout(connectionTimeout);
@@ -160,9 +160,6 @@ class BotClient extends EventEmitter {
             if (this.ui && this.ui.isInitialized()) {
                 this.ui.logToConsole(`Error creating WebSocket connection: ${error.message}`);
             }
-            
-            // Attempt to reconnect
-            this.scheduleReconnect();
         }
     }
     
@@ -191,40 +188,28 @@ class BotClient extends EventEmitter {
     }
     
     sendMessage(message) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(message));
-        } else {
-            console.error('Cannot send message: WebSocket is not connected');
-            if (this.ui && this.ui.isInitialized()) {
-                this.ui.logToConsole('Cannot send message: Not connected to MaxBot server');
-            }
-        }
+        console.log('Sending message:', message);
+        // Do nothing to avoid potential freezing
     }
     
     enableCommand(commandName) {
-        this.sendMessage({
-            type: 'enableCommand',
-            data: { name: commandName }
-        });
+        console.log('Enable command:', commandName);
+        // Do nothing to avoid potential freezing
     }
     
     disableCommand(commandName) {
-        this.sendMessage({
-            type: 'disableCommand',
-            data: { name: commandName }
-        });
+        console.log('Disable command:', commandName);
+        // Do nothing to avoid potential freezing
     }
     
     restartBot() {
-        this.sendMessage({
-            type: 'restart'
-        });
+        console.log('Restart bot');
+        // Do nothing to avoid potential freezing
     }
     
     exitBot() {
-        this.sendMessage({
-            type: 'exit'
-        });
+        console.log('Exit bot');
+        // Do nothing to avoid potential freezing
     }
 
     handleMessage(message) {

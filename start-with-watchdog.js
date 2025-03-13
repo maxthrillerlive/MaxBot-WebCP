@@ -31,11 +31,11 @@ function startApp() {
         process.exit(1);
     });
     
-    // Set up a watchdog timer
+    // Set up a watchdog timer - much shorter now
     const watchdogTimer = setTimeout(() => {
         console.log('Watchdog timer expired, killing application');
         app.kill('SIGKILL');
-    }, 60 * 1000); // 60 seconds
+    }, 20 * 1000); // 20 seconds
     
     // Clear the watchdog timer if the process exits normally
     app.on('exit', () => {
@@ -50,7 +50,7 @@ function startApp() {
             console.log('Forcing exit...');
             app.kill('SIGKILL');
             process.exit(1);
-        }, 5000); // Give it 5 seconds to exit gracefully
+        }, 3000); // Give it 3 seconds to exit gracefully
     });
     
     process.on('SIGTERM', () => {
@@ -60,7 +60,7 @@ function startApp() {
             console.log('Forcing exit...');
             app.kill('SIGKILL');
             process.exit(1);
-        }, 5000); // Give it 5 seconds to exit gracefully
+        }, 3000); // Give it 3 seconds to exit gracefully
     });
 }
 
