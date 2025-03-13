@@ -3,6 +3,9 @@ const BotUI = require('./ui');
 const EventEmitter = require('events');
 const fedora = require('./fedora');
 
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_DELAY_BASE = 2000;
+
 class BotClient extends EventEmitter {
     constructor(ui) {
         super();
@@ -41,47 +44,32 @@ class BotClient extends EventEmitter {
     }
 
     connect() {
-        const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
-        console.log('Connecting to WebSocket server at:', wsUrl);
+        if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            console.log(`Maximum reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('Failed to connect to MaxBot server after multiple attempts. Please check if the server is running.');
+            }
+            return;
+        }
         
-        // Don't try to connect if we're already connecting
-        if (this.connectionState === 'connecting') return;
-        
-        this.connectionState = 'connecting';
+        const serverUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+        console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
         try {
-            // Close existing connection if any
-            if (this.ws) {
-                try {
-                    this.ws.terminate();
-                } catch (e) {
-                    // Ignore errors when terminating
-                }
-                this.ws = null;
-            }
-            
-            // Create new connection
-            this.ws = new WebSocket(wsUrl);
+            this.ws = new WebSocket(serverUrl);
             
             // Set a connection timeout
-            const connectionTimeout = setTimeout(() => {
-                if (this.connectionState === 'connecting') {
-                    console.log('Connection attempt timed out');
-                    this.ws.terminate();
-                    this.connectionState = 'disconnected';
-                    this.handleReconnect();
+            this.connectionTimeout = setTimeout(() => {
+                if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+                    console.log('WebSocket connection timeout');
+                    this.handleConnectionFailure();
                 }
-            }, 10000);
+            }, 5000);
             
-            // Set up event handlers
             this.ws.on('open', () => {
-                clearTimeout(connectionTimeout);
-                this.isConnected = true;
-                this.connectionState = 'connected';
-                this.reconnectAttempts = 0;
-                this.reconnectDelay = 1000;
-                
+                clearTimeout(this.connectionTimeout);
                 console.log('Connected to WebSocket server');
+                this.reconnectAttempts = 0;
                 
                 // Set initial status
                 this.botStatus = {
@@ -109,7 +97,6 @@ class BotClient extends EventEmitter {
                 }, 30000); // Send ping every 30 seconds
             });
             
-            // Handle messages
             this.ws.on('message', (data) => {
                 try {
                     const rawMessage = data.toString();
@@ -242,63 +229,37 @@ class BotClient extends EventEmitter {
                 }
             });
             
-            // Handle connection close
-            this.ws.on('close', () => {
-                clearTimeout(connectionTimeout);
-                
-                // Clear intervals
-                if (this.pingInterval) {
-                    clearInterval(this.pingInterval);
-                    this.pingInterval = null;
-                }
-                
-                if (this.statusInterval) {
-                    clearInterval(this.statusInterval);
-                    this.statusInterval = null;
-                }
-                
-                this.isConnected = false;
-                this.connectionState = 'disconnected';
-                
-                console.log('Disconnected from WebSocket server');
-                
-                // Update status to show disconnected
-                this.botStatus.connected = false;
-                if (this.ui && typeof this.ui.updateStatus === 'function') {
-                    this.ui.updateStatus(this.botStatus);
-                }
-                
-                // Attempt to reconnect
-                this.handleReconnect();
+            this.ws.on('error', (error) => {
+                console.log('WebSocket error:', error.message || 'Unknown error');
+                // Don't try to reconnect here, let the close handler do it
             });
             
-            // Handle errors
-            this.ws.on('error', (error) => {
-                console.error('WebSocket error:', error.message);
-                
-                // Don't attempt to reconnect here, let the close event handle it
+            this.ws.on('close', () => {
+                clearTimeout(this.connectionTimeout);
+                console.log('Disconnected from WebSocket server');
+                this.handleConnectionFailure();
             });
         } catch (error) {
-            console.error('Error connecting to WebSocket:', error);
-            this.connectionState = 'disconnected';
-            this.handleReconnect();
+            console.log('Error creating WebSocket connection:', error.message);
+            this.handleConnectionFailure();
         }
     }
 
-    handleReconnect() {
-        if (this.reconnectTimer) {
+    handleConnectionFailure() {
+        this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+        
+        if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            const delay = RECONNECT_DELAY_BASE * Math.pow(2, this.reconnectAttempts - 1);
+            console.log(`Attempting to reconnect in ${delay/1000} seconds (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+            
             clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = setTimeout(() => this.connect(), delay);
+        } else {
+            console.log(`Maximum reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('Failed to connect to MaxBot server after multiple attempts. Please check if the server is running.');
+            }
         }
-        
-        this.reconnectAttempts++;
-        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelay);
-        
-        this.safeLog(`{yellow-fg}Attempting to reconnect in ${Math.round(delay / 1000)} seconds (attempt ${this.reconnectAttempts})...{/yellow-fg}`);
-        
-        this.reconnectTimer = setTimeout(() => {
-            this.safeLog('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
-            this.connect();
-        }, delay);
     }
 
     handleMessage(message) {
@@ -621,6 +582,21 @@ class BotClient extends EventEmitter {
             this.ui.updateStatus(status);
         } else {
             console.log('Cannot force status update: UI not available');
+        }
+    }
+
+    // Make sure to clean up resources when the client is destroyed
+    destroy() {
+        clearTimeout(this.connectionTimeout);
+        clearTimeout(this.reconnectTimer);
+        
+        if (this.ws) {
+            try {
+                this.ws.close();
+            } catch (e) {
+                // Ignore close errors
+            }
+            this.ws = null;
         }
     }
 }

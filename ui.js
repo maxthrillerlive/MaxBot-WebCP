@@ -48,6 +48,11 @@ class BotUI {
         } catch (e) {
             console.error('Failed to create PID file:', e);
         }
+
+        this.exitTimeout = setTimeout(() => {
+            console.log('Emergency exit timeout reached. Forcing exit.');
+            process.exit(1);
+        }, 30000); // 30 seconds is enough for emergency mode
     }
 
     setupScreen() {
@@ -137,7 +142,11 @@ class BotUI {
     updateStatus() {}
     updateCommands() {}
     isInitialized() { return this.initialized; }
-    exit() {}
+    exit() {
+        console.log('Exiting MaxBot TUI...');
+        clearTimeout(this.exitTimeout);
+        process.exit(0);
+    }
 }
 
 module.exports = BotUI; 
