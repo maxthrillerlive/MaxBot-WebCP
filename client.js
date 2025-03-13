@@ -294,6 +294,36 @@ class BotClient {
             console.error('Error starting bot:', error);
         }
     }
+
+    async isBotRunning() {
+        try {
+            // Try to make a quick connection to check if the bot is running
+            const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
+            
+            return new Promise((resolve) => {
+                const ws = new WebSocket(wsUrl);
+                
+                // Set a short timeout
+                const timeout = setTimeout(() => {
+                    ws.terminate();
+                    resolve(false);
+                }, 1000);
+                
+                ws.on('open', () => {
+                    clearTimeout(timeout);
+                    ws.close();
+                    resolve(true);
+                });
+                
+                ws.on('error', () => {
+                    clearTimeout(timeout);
+                    resolve(false);
+                });
+            });
+        } catch (error) {
+            return false;
+        }
+    }
 }
 
 module.exports = BotClient;
