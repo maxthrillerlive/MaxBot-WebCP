@@ -1776,16 +1776,33 @@ app.get('/', (req, res) => {
           botProcess.unref();
           
           console.log('Started bot process with PID:', botProcess.pid);
-          addLog(`Started bot process with PID: ${botProcess.pid}`);
           
-          // Track the start in connection history
-          trackConnectionState('Start Requested', 'User initiated start');
+          // Use the global addLog function if it exists, otherwise just log to console
+          if (typeof addLog === 'function') {
+            addLog(`Started bot process with PID: ${botProcess.pid}`);
+          } else {
+            console.log(`Started bot process with PID: ${botProcess.pid}`);
+          }
+          
+          // Track the connection state if the function exists
+          if (typeof trackConnectionState === 'function') {
+            trackConnectionState('Start Requested', 'User initiated start');
+          }
           
           res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
         } catch (error) {
           console.error('Error starting bot:', error);
-          addLog(`Error starting bot: ${error.message}`);
-          appState.stats.errors++;
+          
+          // Use the global addLog function if it exists
+          if (typeof addLog === 'function') {
+            addLog(`Error starting bot: ${error.message}`);
+          }
+          
+          // Increment errors if appState exists
+          if (appState && appState.stats) {
+            appState.stats.errors++;
+          }
+          
           res.status(500).json({ error: error.message });
         }
       });
@@ -1851,44 +1868,6 @@ app.post('/api/admin/shutdown', (req, res) => {
     res.json({ success: true, message: 'Shutdown command sent' });
   } catch (error) {
     addLog(`Error sending shutdown command: ${error.message}`);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/admin/start', (req, res) => {
-  try {
-    const { spawn } = require('child_process');
-    const botPath = path.join(__dirname, '..', 'MaxBot', 'index.js');
-    
-    console.log('Attempting to start bot at path:', botPath);
-    
-    // Check if the bot file exists
-    if (!fs.existsSync(botPath)) {
-      console.error('Bot file not found:', botPath);
-      return res.status(404).json({ error: 'Bot file not found: ' + botPath });
-    }
-    
-    // Spawn the bot process
-    const botProcess = spawn('node', [botPath], {
-      detached: true,
-      stdio: 'ignore',
-      env: process.env
-    });
-    
-    // Unref the child process so it can run independently
-    botProcess.unref();
-    
-    console.log('Started bot process with PID:', botProcess.pid);
-    addLog(`Started bot process with PID: ${botProcess.pid}`);
-    
-    // Track the start in connection history
-    trackConnectionState('Start Requested', 'User initiated start');
-    
-    res.json({ success: true, message: 'Bot start initiated', pid: botProcess.pid });
-  } catch (error) {
-    console.error('Error starting bot:', error);
-    addLog(`Error starting bot: ${error.message}`);
     appState.stats.errors++;
     res.status(500).json({ error: error.message });
   }
