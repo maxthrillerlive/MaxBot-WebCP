@@ -98,20 +98,42 @@ function connectToWebSocket() {
       appState.wsStatus = 'Connected';
       appState.reconnectAttempts = 0;
       
-      // Instead of sending a 'register' message, send a 'GET_STATUS' message
-      // which the server recognizes
-      try {
-        const statusRequest = {
-          type: 'GET_STATUS',  // Use 'GET_STATUS' instead of 'register'
-          client_id: clientId,
-          timestamp: Date.now()
-        };
-        
-        ws.send(JSON.stringify(statusRequest));
-        addLog('Sent status request');
-      } catch (e) {
-        addLog(`Error sending status request: ${e.message}`);
-      }
+      // Wait a short time before sending the first message
+      // This can help if the server needs time to initialize the connection
+      setTimeout(() => {
+        try {
+          // Send a simple ping message first to test the connection
+          const pingMessage = {
+            type: 'ping',
+            client_id: clientId,
+            timestamp: Date.now()
+          };
+          
+          ws.send(JSON.stringify(pingMessage));
+          addLog('Sent initial ping message');
+          
+          // Wait a bit before sending the status request
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                const statusRequest = {
+                  type: 'GET_STATUS',
+                  client_id: clientId,
+                  timestamp: Date.now()
+                };
+                
+                ws.send(JSON.stringify(statusRequest));
+                addLog('Sent status request');
+              } catch (e) {
+                addLog(`Error sending status request: ${e.message}`);
+              }
+            }
+          }, 1000);
+          
+        } catch (e) {
+          addLog(`Error sending initial ping: ${e.message}`);
+        }
+      }, 500);
       
       // Set up a ping interval to keep the connection alive
       pingInterval = setInterval(() => {
@@ -119,7 +141,7 @@ function connectToWebSocket() {
           try {
             // Send a ping message
             const pingMessage = {
-              type: 'ping',  // This seems to be recognized by the server
+              type: 'ping',
               client_id: clientId,
               timestamp: Date.now()
             };
@@ -151,116 +173,123 @@ function connectToWebSocket() {
       }, 10000); // Send a ping every 10 seconds
     });
     
-    ws.on('error', (error) => {
-      clearTimeout(connectionTimeout);
-      if (pingInterval) clearInterval(pingInterval);
-      
-      addLog(`WebSocket error: ${error.message}`);
-      appState.wsStatus = 'Error';
-      appState.serverErrors.push({
-        time: new Date().toISOString(),
-        error: error.message
-      });
-    });
-    
-    ws.on('close', (code, reason) => {
-      clearTimeout(connectionTimeout);
-      if (pingInterval) clearInterval(pingInterval);
-      
-      addLog(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reason || 'No reason provided'})`);
-      appState.wsStatus = 'Disconnected';
-      
-      // Calculate reconnect delay based on attempts (exponential backoff with max of 30 seconds)
-      const reconnectDelay = Math.min(Math.pow(2, appState.reconnectAttempts) * 1000, 30000);
-      
-      addLog(`Will attempt to reconnect in ${reconnectDelay/1000} seconds`);
-      
-      // Try to reconnect after delay
-      setTimeout(() => {
-        addLog('Attempting to reconnect...');
-        connectToWebSocket();
-      }, reconnectDelay);
-    });
-    
     ws.on('message', (data) => {
       try {
         // Log the raw data for debugging
-        addLog(`Received raw data: ${data.toString()}`);
+        const dataStr = data.toString();
+        addLog(`Received raw data: ${dataStr}`);
         
-        const message = JSON.parse(data);
+        // Check if the data is valid JSON
+        if (!dataStr.trim().startsWith('{') && !dataStr.trim().startsWith('[')) {
+          addLog(`Received non-JSON data: ${dataStr}`);
+          return;
+        }
+        
+        const message = JSON.parse(dataStr);
         
         // Check if the message has a type
         if (!message.type) {
-            addLog(`Received message without type: ${JSON.stringify(message)}`);
-            
-            // Try to determine if this is a status message
-            if (message.connectionState && message.username && message.commands) {
-                addLog('This appears to be a status message, handling as STATUS type');
-                appState.wsMessages++;
-                return;
-            }
-            
+          addLog(`Received message without type: ${JSON.stringify(message)}`);
+          
+          // Try to determine if this is a status message
+          if (message.connectionState && message.username) {
+            addLog('This appears to be a status message, handling as STATUS type');
+            // Store the status information if needed
+            appState.wsMessages++;
             return;
+          }
+          
+          return;
         }
         
         appState.wsMessages++;
         
         // Handle different message types
-        switch (message.type) {
-            case 'pong':
-                appState.lastPongTime = Date.now();
-                addLog('Received pong response');
-                break;
-                
-            case 'STATUS':
-                addLog(`Received status update`);
-                break;
-                
-            case 'COMMANDS':
-                addLog(`Received commands list`);
-                break;
-                
-            case 'CHAT_MESSAGE':
-                addLog(`Received chat message from ${message.data?.username || 'unknown'}`);
-                break;
-                
-            case 'CONNECTION_STATE':
-                addLog(`Received connection state: ${message.state || 'unknown'}`);
-                break;
-                
-            case 'ERROR':
-                addLog(`Received error from server: ${message.error || 'Unknown error'}`);
-                appState.serverErrors.push({
-                    time: new Date().toISOString(),
-                    error: message.error || 'Unknown error'
-                });
-                break;
-                
-            default:
-                addLog(`Received message of type: ${message.type}`);
+        switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
+          case 'PONG':
+            appState.lastPongTime = Date.now();
+            addLog('Received pong response');
+            break;
+            
+          case 'STATUS':
+            addLog(`Received status update`);
+            break;
+            
+          case 'COMMANDS':
+            addLog(`Received commands list`);
+            break;
+            
+          case 'CHAT_MESSAGE':
+            addLog(`Received chat message from ${message.data?.username || 'unknown'}`);
+            break;
+            
+          case 'CONNECTION_STATE':
+            addLog(`Received connection state: ${message.state || 'unknown'}`);
+            break;
+            
+          case 'ERROR':
+            addLog(`Received error from server: ${message.error || 'Unknown error'}`);
+            appState.serverErrors.push({
+              time: new Date().toISOString(),
+              error: message.error || 'Unknown error'
+            });
+            break;
+            
+          default:
+            addLog(`Received message of type: ${message.type}`);
         }
       } catch (error) {
         addLog(`Error processing message: ${error.message}`);
       }
     });
     
-    // Set up a heartbeat detection
-    ws.on('pong', () => {
-      appState.lastPongTime = Date.now();
-      addLog('Received WebSocket protocol pong');
+    ws.on('close', (code, reason) => {
+      addLog(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reason || 'No reason provided'})`);
+      appState.wsStatus = 'Disconnected';
+      clearInterval(pingInterval);
+      
+      // Implement exponential backoff for reconnection
+      const delay = Math.min(1000 * Math.pow(1.5, appState.reconnectAttempts - 1), 30000);
+      addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
+      
+      setTimeout(() => {
+        if (appState.running) {
+          addLog('Attempting to reconnect...');
+          connectToWebSocket();
+        }
+      }, delay);
+    });
+    
+    ws.on('error', (error) => {
+      addLog(`WebSocket error: ${error.message}`);
+      appState.wsStatus = 'Error';
+      appState.serverErrors.push({
+        time: new Date().toISOString(),
+        error: error.message
+      });
+      
+      // Don't need to close here, the 'close' event will be triggered automatically
     });
     
     return ws;
   } catch (error) {
-    addLog(`Error creating WebSocket connection: ${error.message}`);
+    addLog(`Error creating WebSocket: ${error.message}`);
     appState.wsStatus = 'Error';
+    appState.serverErrors.push({
+      time: new Date().toISOString(),
+      error: error.message
+    });
     
-    // Try to reconnect after delay
-    const reconnectDelay = Math.min(Math.pow(2, appState.reconnectAttempts) * 1000, 30000);
+    // Implement exponential backoff for reconnection
+    const delay = Math.min(1000 * Math.pow(1.5, appState.reconnectAttempts - 1), 30000);
+    addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
+    
     setTimeout(() => {
-      addLog('Attempting to reconnect...');
-      connectToWebSocket();
-    }, reconnectDelay);
+      if (appState.running) {
+        addLog('Attempting to reconnect...');
+        connectToWebSocket();
+      }
+    }, delay);
     
     return null;
   }
