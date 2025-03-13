@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaxBot Environment Editor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1a1a1a;
+      color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    h1 {
+      color: #ddd;
+      margin-top: 0;
+      border-bottom: 1px solid #444;
+      padding-bottom: 10px;
+    }
+    .info-text {
+      color: #8ab4f8;
+      margin-bottom: 15px;
+    }
+    .editor-container {
+      margin: 15px 0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background-color: #1e1e1e;
+    }
+    #env-editor {
+      width: 100%;
+      min-height: 300px;
+      padding: 10px;
+      font-family: monospace;
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      border: none;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .button-container {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+    }
+    .action-button {
+      padding: 8px 16px;
+      background-color: #3a3a3a;
+      color: #f0f0f0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    .action-button:hover {
+      background-color: #4a4a4a;
+    }
+    .save-button {
+      background-color: #2c5282;
+    }
+    .save-button:hover {
+      background-color: #3a6ea5;
+    }
+    .help-section {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #222;
+      border-radius: 4px;
+    }
+    .help-section h2 {
+      margin-top: 0;
+      color: #ddd;
+      font-size: 18px;
+    }
+    .help-section ul {
+      padding-left: 20px;
+    }
+    .help-section li {
+      margin-bottom: 8px;
+    }
+    .warning-text {
+      color: #ffcc00;
+      font-weight: bold;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #8ab4f8;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MaxBot Environment Editor</h1>
+    <p class="info-text">Edit your bot's configuration. Changes will require a bot restart to take effect.</p>
+    
+    <div class="editor-container">
+      <textarea id="env-editor" rows="15"></textarea>
+    </div>
+    
+    <div class="button-container">
+      <button id="save-env-btn" class="action-button save-button">💾 Save Configuration</button>
+      <button id="reload-env-btn" class="action-button">🔄 Reload</button>
+      <button id="back-btn" class="action-button">⬅️ Back to Control Panel</button>
+    </div>
+    
+    <div class="help-section">
+      <h2>Common Configuration Variables</h2>
+      <ul>
+        <li><strong>BOT_USERNAME</strong>: Your bot's Twitch username</li>
+        <li><strong>CHANNEL_NAME</strong>: The Twitch channel where the bot will operate</li>
+        <li><strong>OAUTH_TOKEN</strong>: Your bot's OAuth token (get from <a href="https://twitchapps.com/tmi/" target="_blank" style="color: #8ab4f8;">https://twitchapps.com/tmi/</a>)</li>
+        <li><strong>PREFIX</strong>: Command prefix (usually "!")</li>
+      </ul>
+      <p class="warning-text">⚠️ After saving, you'll need to restart the bot for changes to take effect.</p>
+    </div>
+    
+    <a href="/" class="back-link">← Return to Control Panel</a>
+  </div>
+
+  <script>
+    // Function to load environment variables
+    function loadEnvVariables() {
+      fetch('/api/admin/env')
+        .then(response => response.json())
+        .then(data => {
+          if (data.content) {
+            document.getElementById('env-editor').value = data.content;
+          }
+        })
+        .catch(error => {
+          console.error('Error loading environment variables:', error);
+          alert('Failed to load environment variables: ' + error.message);
+        });
+    }
+
+    // Function to save environment variables
+    function saveEnvVariables() {
+      const envEditor = document.getElementById('env-editor');
+      if (confirm('Are you sure you want to save these changes? This will update your bot configuration.')) {
+        fetch('/api/admin/env', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content: envEditor.value })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert('Configuration saved successfully! Restart the bot for changes to take effect.');
+          } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('Error saving environment variables:', error);
+          alert('Failed to save configuration: ' + error.message);
+        });
+      }
+    }
+
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', function() {
+      // Load environment variables when the page loads
+      loadEnvVariables();
+      
+      // Set up button event listeners
+      document.getElementById('save-env-btn').addEventListener('click', saveEnvVariables);
+      
+      document.getElementById('reload-env-btn').addEventListener('click', function() {
+        if (confirm('Reload the current configuration? Any unsaved changes will be lost.')) {
+          loadEnvVariables();
+        }
+      });
+      
+      document.getElementById('back-btn').addEventListener('click', function() {
+        window.location.href = '/';
+      });
+    });
+  </script>
+</body>
+</html> 
