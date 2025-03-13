@@ -11,6 +11,12 @@ class BotUI {
         // Flag to track initialization
         this.initialized = false;
         this.client = null;
+        
+        // Add a safety timeout to force exit after 5 minutes
+        this.exitTimeout = setTimeout(() => {
+            console.log('Safety timeout reached, forcing exit');
+            process.exit(0);
+        }, 5 * 60 * 1000); // 5 minutes
     }
 
     setupScreen() {
@@ -18,17 +24,38 @@ class BotUI {
             console.log('Setting up TUI screen...');
             
             // Create the screen
-            this.screen = blessed.screen({
-                smartCSR: true,
+        this.screen = blessed.screen({
+            smartCSR: true,
                 title: 'MaxBot TUI',
                 dockBorders: true,
-                fullUnicode: true
+                fullUnicode: true,
+                sendFocus: true,
+                useBCE: true
             });
             
-            // Set key bindings - add more keys for better accessibility
-            this.screen.key(['escape', 'q', 'Q', 'C-c', 'x', 'X', 'e', 'E'], () => {
+            // Set key bindings - try ALL possible keys
+            this.screen.key(['escape', 'q', 'Q', 'C-c', 'x', 'X', 'e', 'E', 'C-d', 'C-x', 'C-q', 'C-z', 'f10', 'f4'], () => {
                 console.log('Exit key pressed');
                 process.exit(0);
+            });
+            
+            // Try to catch ANY key press
+            this.screen.on('keypress', (ch, key) => {
+                console.log('Key pressed:', key ? key.name : ch);
+                // If user presses any key 5 times in a row, exit
+                if (!this.keyPressCount) this.keyPressCount = 0;
+                this.keyPressCount++;
+                
+                if (this.keyPressCount >= 5) {
+                    console.log('Multiple key presses detected, exiting');
+                    process.exit(0);
+                }
+                
+                // Reset count after 2 seconds
+                clearTimeout(this.keyResetTimeout);
+                this.keyResetTimeout = setTimeout(() => {
+                    this.keyPressCount = 0;
+                }, 2000);
             });
             
             // Create the grid layout
@@ -91,17 +118,20 @@ class BotUI {
             
             // Create a simple text box with clear exit instructions
             this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
-                label: ' Exit Instructions ',
+                label: ' EMERGENCY EXIT INSTRUCTIONS ',
                 tags: true,
-                content: '{center}{bold}Press any of these keys to exit:{/bold}{/center}\n\n' +
-                         '{center}X, Q, E, Escape, or Ctrl+C{/center}\n\n' +
-                         '{center}(Mouse clicking may not work in PuTTY){/center}',
+                content: '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
+                         '{center}1. Press ANY key 5 times quickly{/center}\n' +
+                         '{center}2. Wait 5 minutes for auto-exit{/center}\n' +
+                         '{center}3. In PuTTY, close the window{/center}\n' +
+                         '{center}4. On server, use kill command{/center}',
                 border: {
                     type: 'line',
                     fg: 'red'
                 },
                 style: {
                     fg: 'white',
+                    bg: 'red',
                     border: {
                         fg: 'red'
                     }
@@ -114,7 +144,7 @@ class BotUI {
                 left: 0,
                 right: 0,
                 height: 1,
-                content: ' Press X, Q, E, Escape, or Ctrl+C to exit',
+                content: ' EMERGENCY EXIT: Press ANY key 5 times quickly or wait 5 minutes for auto-exit',
                 style: {
                     fg: 'white',
                     bg: 'red'
@@ -132,6 +162,24 @@ class BotUI {
             setInterval(() => {
                 this.screen.render();
             }, 1000);
+            
+            // Add a countdown timer for the auto-exit
+            let remainingMinutes = 5;
+            this.countdownInterval = setInterval(() => {
+                remainingMinutes--;
+                if (remainingMinutes <= 0) {
+                    clearInterval(this.countdownInterval);
+                } else {
+                    this.adminBox.setContent(
+                        '{center}{bold}EMERGENCY EXIT OPTIONS:{/bold}{/center}\n\n' +
+                        '{center}1. Press ANY key 5 times quickly{/center}\n' +
+                        `{center}2. Auto-exit in ${remainingMinutes} minutes{/center}\n` +
+                        '{center}3. In PuTTY, close the window{/center}\n' +
+                        '{center}4. On server, use kill command{/center}'
+                    );
+                this.screen.render();
+                }
+            }, 60 * 1000); // Update every minute
             
             console.log('TUI setup complete');
             
@@ -168,17 +216,17 @@ class BotUI {
     showConfirmDialog(message) {
         return new Promise((resolve) => {
             const dialog = blessed.question({
-                parent: this.screen,
+            parent: this.screen,
                 border: 'line',
                 height: 'shrink',
                 width: 'half',
-                top: 'center',
-                left: 'center',
+            top: 'center',
+            left: 'center',
                 label: ' Confirm ',
                 tags: true,
-                keys: true,
-                vi: true,
-                mouse: true,
+            keys: true,
+            vi: true,
+            mouse: true,
                 content: message,
                 style: {
                     fg: 'white',
@@ -218,7 +266,10 @@ class BotUI {
     // Add an exit method to clean up resources
     exit() {
         console.log('Exiting MaxBot TUI...');
-        // No need to clean up the status panel since it's disabled
+        // Clear any timeouts and intervals
+        clearTimeout(this.exitTimeout);
+        clearTimeout(this.keyResetTimeout);
+        clearInterval(this.countdownInterval);
     }
 }
 
