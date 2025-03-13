@@ -1650,8 +1650,10 @@ app.get('/', (req, res) => {
       }
       
       // First, make sure we have direct references to the buttons
-      document.addEventListener('DOMContentLoaded', function() {
-        // Get button references after the DOM is fully loaded
+      window.addEventListener('load', function() {
+        console.log('Page fully loaded, attaching button handlers');
+        
+        // Get button references
         const restartBtn = document.getElementById('restart-bot');
         const shutdownBtn = document.getElementById('shutdown-bot');
         const startBtn = document.getElementById('start-bot');
@@ -1712,18 +1714,18 @@ app.get('/', (req, res) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
               })
-              .then(res => res.json())
-              .then(data => {
+              .then(function(res) { return res.json(); })
+              .then(function(data) {
                 console.log('Start response:', data);
                 if (data.success) {
-                  alert(`Bot started with PID: ${data.pid}`);
+                  alert('Bot started with PID: ' + data.pid);
                 } else {
-                  alert(`Error: ${data.error || 'Unknown error'}`);
+                  alert('Error: ' + (data.error || 'Unknown error'));
                 }
               })
-              .catch(err => {
+              .catch(function(err) {
                 console.error('Start error:', err);
-                alert(`Error: ${err.message}`);
+                alert('Error: ' + err.message);
               });
             }
           };
@@ -1761,7 +1763,7 @@ app.get('/', (req, res) => {
           if (Array.isArray(appState.logs)) {
             appState.logs.push({
               time: timestamp,
-              message: `Started bot process with PID: ${botProcess.pid}`
+              message: 'Started bot process with PID: ' + botProcess.pid
             });
           }
           
@@ -1788,7 +1790,7 @@ app.get('/', (req, res) => {
           if (Array.isArray(appState.logs)) {
             appState.logs.push({
               time: timestamp,
-              message: `Error starting bot: ${error.message}`
+              message: 'Error starting bot: ' + error.message
             });
           }
           
