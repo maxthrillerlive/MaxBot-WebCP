@@ -10,13 +10,13 @@ const RECONNECT_DELAY_BASE = 2000;
 class BotClient extends EventEmitter {
     constructor(ui) {
         super();
-        console.log('BotClient constructor called with UI:', ui ? 'UI provided' : 'No UI provided');
+        console.log('BotClient constructor called with UI:', ui ? 'UI provided' : 'No UI');
         this.ui = ui;
         this.ws = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000;
+        this.reconnectDelay = 2000; // 2 seconds
         this.maxReconnectDelay = 30000;
         this.reconnectTimer = null;
         this.connectionState = 'disconnected';
@@ -30,7 +30,7 @@ class BotClient extends EventEmitter {
         
         // We'll initialize Fedora later when UI is ready
         console.log('BotClient initialized, deferring Fedora integration');
-        this.connect();
+        this.connectToServer();
     }
 
     // Helper method to safely log to console
@@ -44,223 +44,143 @@ class BotClient extends EventEmitter {
         }
     }
 
-    connect() {
-        if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            console.log(`Maximum reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
-            if (this.ui && this.ui.isInitialized()) {
-                this.ui.logToConsole('Failed to connect to MaxBot server after multiple attempts. Please check if the server is running.');
-            }
-            return;
-        }
-        
+    connectToServer() {
         const serverUrl = config.websocket.url;
         console.log(`Connecting to WebSocket server at: ${serverUrl}`);
         
         try {
             this.ws = new WebSocket(serverUrl);
-            
-            // Set a connection timeout
-            this.connectionTimeout = setTimeout(() => {
-                if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-                    console.log('WebSocket connection timeout');
-                    this.handleConnectionFailure();
-                }
-            }, 5000);
+            console.log('Connection initiated');
             
             this.ws.on('open', () => {
-                clearTimeout(this.connectionTimeout);
                 console.log('Connected to WebSocket server');
                 this.reconnectAttempts = 0;
                 
-                // Set initial status
-                this.botStatus = {
-                    connected: true,
-                    channel: 'Connecting...',
-                    uptime: 0
-                };
+                // Request initial status
+                this.sendMessage({ type: 'getStatus' });
                 
-                // Update UI
-                if (this.ui && typeof this.ui.updateStatus === 'function') {
-                    this.ui.updateStatus(this.botStatus);
+                // Request command list
+                this.sendMessage({ type: 'getCommands' });
+                
+                // Update UI if available
+                if (this.ui && this.ui.isInitialized()) {
+                    this.ui.logToConsole('Connected to MaxBot server');
                 }
-                
-                // Set up ping interval to keep connection alive
-                this.pingInterval = setInterval(() => {
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        try {
-                            // Send a ping message to keep the connection alive
-                            this.ws.send(JSON.stringify({ type: 'ping' }));
-                            console.log('Sent ping to server');
-                        } catch (error) {
-                            console.error('Error sending ping:', error);
-                        }
-                    }
-                }, 30000); // Send ping every 30 seconds
             });
             
             this.ws.on('message', (data) => {
                 try {
-                    const rawMessage = data.toString();
-                    console.log('Received message from server:', rawMessage.substring(0, 100) + '...');
+                    const message = JSON.parse(data);
                     
-                    // Try to parse the message
-                    let message;
-                    try {
-                        message = JSON.parse(rawMessage);
-                    } catch (parseError) {
-                        console.error('Error parsing message:', parseError);
-                        return;
-                    }
-                    
-                    // Extract status information from the message
-                    let statusUpdated = false;
-                    
-                    // Check for connection state
-                    if (message.data && message.data.connectionState) {
-                        this.botStatus.connected = message.data.connectionState === 'OPEN';
-                        statusUpdated = true;
-                    }
-                    
-                    // Check for channel information
-                    if (message.data && message.data.channels && message.data.channels.length > 0) {
-                        this.botStatus.channel = message.data.channels[0];
-                        statusUpdated = true;
-                    }
-                    
-                    // Check for uptime information
-                    if (message.data && message.data.uptime !== undefined) {
-                        this.botStatus.uptime = message.data.uptime;
-                        statusUpdated = true;
-                    }
-                    
-                    // If we extracted any status information, update the UI
-                    if (statusUpdated && this.ui && typeof this.ui.updateStatus === 'function') {
-                        console.log('Updating status with:', JSON.stringify(this.botStatus));
-                        this.ui.updateStatus(this.botStatus);
-                    }
-                    
-                    // Handle different message types
-                    if (message.type === 'status' || message.type === 'STATUS') {
-                        // The server might be sending status updates directly
-                        this.handleStatusUpdate(message.data || message);
-                    } else if (message.connectionStatus !== undefined) {
-                        // The server might be sending status in a different format
-                        // This looks like it might be the actual format based on the console output
-                        const status = {
-                            connected: message.connectionStatus === 'connected',
-                            channel: message.channel || 'Unknown',
-                            uptime: message.uptime || 0,
-                            commands: message.commands || []
-                        };
-                        this.handleStatusUpdate(status);
-                    } else if (message.type === 'console') {
-                        this.safeLog(message.data.message);
-                    } else if (message.type === 'command-update') {
-                        this.handleCommandUpdate(message.data);
-                    } else if (message.type === 'dbus-message') {
-                        const { sender, message: content, timestamp } = message.data;
-                        this.safeLog(`{magenta-fg}[D-Bus] ${sender}:{/magenta-fg} ${content}`);
-                        this.emit('dbus-message', message.data);
-                    } else if (message.type === 'dbus-notification') {
-                        const { title, body, timestamp } = message.data;
-                        this.safeLog(`{magenta-fg}[Notification] ${title}:{/magenta-fg} ${body}`);
-                        this.emit('dbus-notification', message.data);
+                    if (message.type === 'status') {
+                        if (this.ui && this.ui.isInitialized()) {
+                            this.ui.updateStatus(message.data);
+                        }
+                    } else if (message.type === 'commands') {
+                        if (this.ui && this.ui.isInitialized()) {
+                            this.ui.updateCommands(message.data);
+                        }
                     } else if (message.type === 'log') {
-                        const { level, message: logMessage, timestamp } = message.data;
-                        
-                        // Format based on log level
-                        let formattedMessage;
-                        switch (level) {
-                            case 'error':
-                                formattedMessage = `{red-fg}[ERROR] ${logMessage}{/red-fg}`;
-                                break;
-                            case 'warn':
-                                formattedMessage = `{yellow-fg}[WARN] ${logMessage}{/yellow-fg}`;
-                                break;
-                            case 'debug':
-                                formattedMessage = `{gray-fg}[DEBUG] ${logMessage}{/gray-fg}`;
-                                break;
-                            case 'info':
-                            default:
-                                formattedMessage = `{white-fg}[INFO] ${logMessage}{/white-fg}`;
-                                break;
+                        if (this.ui && this.ui.isInitialized()) {
+                            this.ui.logToConsole(message.data);
                         }
-                        
-                        this.safeLog(formattedMessage);
-                        this.emit('log', message.data);
-                    } else {
-                        // If we don't recognize the message type, try to extract useful information
-                        console.log('Unrecognized message format:', message);
-                        
-                        // Check if there's any status-like information we can use
-                        if (message.available !== undefined) {
-                            // This might be a command list
-                            this.safeLog(`{cyan-fg}Received command list with ${message.available} commands{/cyan-fg}`);
-                            if (message.commands && Array.isArray(message.commands)) {
-                                this.ui.updateCommands(message.commands);
-                            }
-                        }
-                        
-                        // Check if there's any channel information
-                        if (message.channels !== undefined) {
-                            this.safeLog(`{cyan-fg}Bot is in channels: ${JSON.stringify(message.channels)}{/cyan-fg}`);
-                        }
-                        
-                        // Check if there's a processId (might indicate the bot is running)
-                        if (message.processId !== undefined) {
-                            this.safeLog(`{cyan-fg}Bot process ID: ${message.processId}{/cyan-fg}`);
-                        }
-                    }
-                    
-                    // Also check for pong responses
-                    try {
-                        if (message.type === 'pong') {
-                            console.log('Received pong from server');
-                        }
-                    } catch (e) {
-                        // Ignore parsing errors
-                    }
-                    
-                    // Render the screen if UI is available
-                    if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                        this.ui.screen.render();
                     }
                 } catch (error) {
                     console.error('Error processing message:', error);
+                    if (this.ui && this.ui.isInitialized()) {
+                        this.ui.logToConsole(`Error processing message: ${error.message}`);
+                    }
                 }
             });
             
             this.ws.on('error', (error) => {
-                console.log('WebSocket error:', error.message || 'Unknown error');
-                // Don't try to reconnect here, let the close handler do it
+                console.error('WebSocket error:', error.message);
+                if (this.ui && this.ui.isInitialized()) {
+                    this.ui.logToConsole(`WebSocket error: ${error.message}`);
+                }
             });
             
             this.ws.on('close', () => {
-                clearTimeout(this.connectionTimeout);
                 console.log('Disconnected from WebSocket server');
-                this.handleConnectionFailure();
+                
+                if (this.ui && this.ui.isInitialized()) {
+                    this.ui.updateStatus({ connected: false });
+                    this.ui.logToConsole('Disconnected from MaxBot server');
+                }
+                
+                // Attempt to reconnect
+                this.scheduleReconnect();
             });
         } catch (error) {
-            console.log('Error creating WebSocket connection:', error.message);
-            this.handleConnectionFailure();
+            console.error('Error creating WebSocket connection:', error);
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole(`Error creating WebSocket connection: ${error.message}`);
+            }
+            
+            // Attempt to reconnect
+            this.scheduleReconnect();
         }
     }
-
-    handleConnectionFailure() {
-        this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+    
+    scheduleReconnect() {
+        this.reconnectAttempts++;
         
-        if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            const delay = RECONNECT_DELAY_BASE * Math.pow(2, this.reconnectAttempts - 1);
-            console.log(`Attempting to reconnect in ${delay/1000} seconds (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+        if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+            const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+            console.log(`Attempting to reconnect in ${Math.round(delay/1000)} seconds (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = setTimeout(() => this.connect(), delay);
-        } else {
-            console.log(`Maximum reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
             if (this.ui && this.ui.isInitialized()) {
-                this.ui.logToConsole('Failed to connect to MaxBot server after multiple attempts. Please check if the server is running.');
+                this.ui.logToConsole(`Attempting to reconnect in ${Math.round(delay/1000)} seconds (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+            }
+            
+            setTimeout(() => {
+                console.log('Attempting to reconnect...');
+                this.connectToServer();
+            }, delay);
+        } else {
+            console.log('Maximum reconnection attempts reached. Giving up.');
+            
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('Maximum reconnection attempts reached. Please restart the application.');
             }
         }
+    }
+    
+    sendMessage(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        } else {
+            console.error('Cannot send message: WebSocket is not connected');
+            if (this.ui && this.ui.isInitialized()) {
+                this.ui.logToConsole('Cannot send message: Not connected to MaxBot server');
+            }
+        }
+    }
+    
+    enableCommand(commandName) {
+        this.sendMessage({
+            type: 'enableCommand',
+            data: { name: commandName }
+        });
+    }
+    
+    disableCommand(commandName) {
+        this.sendMessage({
+            type: 'disableCommand',
+            data: { name: commandName }
+        });
+    }
+    
+    restartBot() {
+        this.sendMessage({
+            type: 'restart'
+        });
+    }
+    
+    exitBot() {
+        this.sendMessage({
+            type: 'exit'
+        });
     }
 
     handleMessage(message) {
@@ -340,62 +260,6 @@ class BotClient extends EventEmitter {
         this.send({ type: 'GET_COMMANDS' });
     }
 
-    enableCommand(command) {
-        this.send({ type: 'ENABLE_COMMAND', command });
-    }
-
-    disableCommand(command) {
-        this.send({ type: 'DISABLE_COMMAND', command });
-    }
-
-    executeCommand(command, channel) {
-        this.send({ 
-            type: 'EXECUTE_COMMAND',
-            command,
-            channel
-        });
-    }
-
-    restartBot() {
-        if (this.isConnected) {
-            this.restartInProgress = true;
-            this.ui.logToConsole('{yellow-fg}Restarting bot...{/yellow-fg}');
-            this.send({ type: 'RESTART_BOT' });
-            this.ui.logToConsole('Restart command sent to bot');
-            
-            // Set a timeout to clear the restart flag if it takes too long
-            setTimeout(() => {
-                if (this.restartInProgress) {
-                    this.restartInProgress = false;
-                    this.ui.logToConsole('{red-fg}Restart timed out. Please check the bot server.{/red-fg}');
-                }
-            }, 30000); // 30 second timeout
-        } else {
-            this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
-        }
-    }
-
-    exitBot() {
-        if (this.isConnected) {
-            this.ui.logToConsole('{yellow-fg}Shutting down bot...{/yellow-fg}');
-            this.send({ type: 'EXIT_BOT' });
-            this.ui.logToConsole('Shutdown command sent to bot');
-            
-            // Close the connection after a short delay
-            setTimeout(() => {
-                if (this.ws) {
-                    this.ws.close();
-                }
-                // Exit the TUI after sending the shutdown command
-                setTimeout(() => process.exit(0), 500);
-            }, 1000);
-        } else {
-            this.ui.logToConsole('{red-fg}Not connected to server{/red-fg}');
-            // Exit anyway since we're not connected
-            setTimeout(() => process.exit(0), 500);
-        }
-    }
-
     startBot() {
         // Check if we're already connected
         if (this.isConnected) {
@@ -429,7 +293,7 @@ class BotClient extends EventEmitter {
             
             // Try to connect after a short delay
             setTimeout(() => {
-                this.connect();
+                this.connectToServer();
             }, 3000);
             
         } catch (error) {

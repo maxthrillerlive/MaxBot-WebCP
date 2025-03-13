@@ -1,16 +1,28 @@
-module.exports = {
-    // WebSocket server configuration
-    websocket: {
-        host: '192.168.1.122',
-        port: 8080,
-        get url() {
-            return `ws://${this.host}:${this.port}`;
-        }
-    },
-    
-    // UI configuration
-    ui: {
-        // Auto-exit timeout in milliseconds (5 seconds)
-        exitTimeout: 5000
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Default values
+const defaults = {
+  WEBSOCKET_HOST: 'localhost',
+  WEBSOCKET_PORT: '8080'
+};
+
+// Get environment variables with fallbacks to defaults
+const config = {
+  websocket: {
+    host: process.env.WEBSOCKET_HOST || defaults.WEBSOCKET_HOST,
+    port: process.env.WEBSOCKET_PORT || defaults.WEBSOCKET_PORT,
+    get url() {
+      return `ws://${this.host}:${this.port}`;
     }
-}; 
+  },
+  
+  // Add other configuration sections as needed
+  ui: {
+    title: 'MaxBot TUI'
+  }
+};
+
+module.exports = config; 
