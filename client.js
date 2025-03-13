@@ -81,6 +81,35 @@ class BotClient extends EventEmitter {
                     this.emit('dbus-notification', message.data);
                 }
                 
+                // Handle log messages
+                if (message.type === 'log') {
+                    const { level, message: logMessage, timestamp } = message.data;
+                    
+                    // Format based on log level
+                    let formattedMessage;
+                    switch (level) {
+                        case 'error':
+                            formattedMessage = `{red-fg}[ERROR] ${logMessage}{/red-fg}`;
+                            break;
+                        case 'warn':
+                            formattedMessage = `{yellow-fg}[WARN] ${logMessage}{/yellow-fg}`;
+                            break;
+                        case 'debug':
+                            formattedMessage = `{gray-fg}[DEBUG] ${logMessage}{/gray-fg}`;
+                            break;
+                        case 'info':
+                        default:
+                            formattedMessage = `{white-fg}[INFO] ${logMessage}{/white-fg}`;
+                            break;
+                    }
+                    
+                    this.ui.logToConsole(formattedMessage);
+                    this.ui.screen.render();
+                    
+                    // Also emit an event for Fedora integration
+                    this.emit('log', message.data);
+                }
+                
                 this.handleMessage(message);
             } catch (error) {
                 console.error('Error processing message:', error);

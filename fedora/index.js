@@ -130,6 +130,10 @@ class FedoraIntegration extends EventEmitter {
     this.client.on('dbus-notification', (data) => {
       this.handleDBusNotification(data);
     });
+    
+    this.client.on('log', (data) => {
+      this.handleLogMessage(data);
+    });
   }
 
   handleDBusMessage(data) {
@@ -150,6 +154,16 @@ class FedoraIntegration extends EventEmitter {
     this.updateFedoraPanel(`Last notification: ${title}: ${body.substring(0, 30)}${body.length > 30 ? '...' : ''}`);
     
     this.ui.screen.render();
+  }
+
+  handleLogMessage(data) {
+    const { level, message, timestamp } = data;
+    
+    // Update the Fedora panel with the latest log if it's important
+    if (level === 'error' || level === 'warn') {
+      this.updateFedoraPanel(`Last ${level}: ${message.substring(0, 30)}${message.length > 30 ? '...' : ''}`);
+      this.ui.screen.render();
+    }
   }
 
   updateFedoraPanel(statusMessage) {
