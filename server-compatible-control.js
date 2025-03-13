@@ -1739,12 +1739,21 @@ app.get('/', (req, res) => {
           start: startBtn 
         });
         
+        // Define a function to get the current WebSocket connection
+        function getWebSocket() {
+          // This ensures we're accessing the global ws variable
+          return window.ws || ws;
+        }
+        
         if (restartBtn) {
           restartBtn.onclick = function() {
             console.log('Restart button clicked');
             if (confirm('Are you sure you want to restart the bot? This will temporarily disconnect it from Twitch chat.')) {
               try {
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                // Get the current WebSocket connection
+                const websocket = getWebSocket();
+                
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
                   const msg = {
                     type: 'RESTART_BOT',
                     client_id: clientId,
@@ -1752,7 +1761,7 @@ app.get('/', (req, res) => {
                   };
                   
                   console.log('Sending restart command:', msg);
-                  ws.send(JSON.stringify(msg));
+                  websocket.send(JSON.stringify(msg));
                   
                   // Add to logs
                   const timestamp = new Date().toISOString();
@@ -1765,7 +1774,7 @@ app.get('/', (req, res) => {
                   appState.stats.connectionHistory.push({
                     time: Date.now(),
                     state: 'Restart Requested',
-                    reason: 'User initiated restart via API'
+                    reason: 'User initiated restart'
                   });
                   
                   alert('Restart command sent. The bot will restart shortly.');
@@ -1786,7 +1795,10 @@ app.get('/', (req, res) => {
             console.log('Shutdown button clicked');
             if (confirm('Are you sure you want to shut down the bot? You will need to manually restart it.')) {
               try {
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                // Get the current WebSocket connection
+                const websocket = getWebSocket();
+                
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
                   const msg = {
                     type: 'EXIT_BOT',
                     client_id: clientId,
@@ -1794,7 +1806,7 @@ app.get('/', (req, res) => {
                   };
                   
                   console.log('Sending shutdown command:', msg);
-                  ws.send(JSON.stringify(msg));
+                  websocket.send(JSON.stringify(msg));
                   
                   // Add to logs
                   const timestamp = new Date().toISOString();
@@ -1807,7 +1819,7 @@ app.get('/', (req, res) => {
                   appState.stats.connectionHistory.push({
                     time: Date.now(),
                     state: 'Shutdown Requested',
-                    reason: 'User initiated shutdown via API'
+                    reason: 'User initiated shutdown'
                   });
                   
                   alert('Shutdown command sent. The bot will shut down shortly.');
@@ -1823,6 +1835,7 @@ app.get('/', (req, res) => {
           };
         }
         
+        // Start button remains the same as it uses fetch, not WebSocket
         if (startBtn) {
           startBtn.onclick = function() {
             console.log('Start button clicked');
