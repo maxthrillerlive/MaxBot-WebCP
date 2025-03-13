@@ -25,8 +25,8 @@ class BotUI {
                 fullUnicode: true
             });
             
-            // Set key bindings
-            this.screen.key(['escape', 'q', 'C-c', 'x', 'X'], () => {
+            // Set key bindings - add more keys for better accessibility
+            this.screen.key(['escape', 'q', 'Q', 'C-c', 'x', 'X', 'e', 'E'], () => {
                 console.log('Exit key pressed');
                 process.exit(0);
             });
@@ -89,41 +89,37 @@ class BotUI {
                 }
             });
             
-            // Replace the admin box with a simpler exit button
-            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.button, {
-                label: ' Exit Application ',
-                content: '{center}Click here to exit{/center}',
+            // Create a simple text box with clear exit instructions
+            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
+                label: ' Exit Instructions ',
                 tags: true,
+                content: '{center}{bold}Press any of these keys to exit:{/bold}{/center}\n\n' +
+                         '{center}X, Q, E, Escape, or Ctrl+C{/center}\n\n' +
+                         '{center}(Mouse clicking may not work in PuTTY){/center}',
                 border: {
                     type: 'line',
                     fg: 'red'
                 },
                 style: {
                     fg: 'white',
-                    bg: 'red',
-                    focus: {
-                        bg: 'dark-red'
-                    },
-                    hover: {
-                        bg: 'dark-red'
-                    },
                     border: {
                         fg: 'red'
                     }
-                },
-                mouse: true,
-                keys: true,
-                vi: true
+                }
             });
             
-            // Add direct exit on press
-            this.adminBox.on('press', () => {
-                console.log('Exit button pressed');
-                process.exit(0);
-            });
-            
-            // Focus on the exit button
-            this.adminBox.focus();
+            // Add a message at the bottom of the screen
+            this.screen.append(blessed.box({
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 1,
+                content: ' Press X, Q, E, Escape, or Ctrl+C to exit',
+                style: {
+                    fg: 'white',
+                    bg: 'red'
+                }
+            }));
             
             // Mark as initialized
             this.initialized = true;
