@@ -717,68 +717,6 @@ app.get('/api/admin/start-bot', (req, res) => {
   }
 });
 
-// Add API endpoints for environment variables
-app.get('/api/admin/env', (req, res) => {
-  try {
-    const envPath = path.join(__dirname, '..', 'MaxBot', '.env');
-    let envContent = '';
-    
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf8');
-    } else {
-      // If .env doesn't exist, try to find a sample or create a new one
-      const samplePath = path.join(__dirname, '..', 'MaxBot', '.env.sample');
-      if (fs.existsSync(samplePath)) {
-        envContent = fs.readFileSync(samplePath, 'utf8');
-      } else {
-        envContent = '# Bot Configuration\n' +
-                    'BOT_USERNAME=your_bot_username\n' +
-                    'CHANNEL_NAME=your_channel\n' +
-                    'OAUTH_TOKEN=oauth:your_token_here\n' +
-                    'PREFIX=!\n' +
-                    '# Add other configuration variables as needed';
-      }
-    }
-    
-    res.json({ content: envContent });
-  } catch (error) {
-    console.error('Error reading env file:', error);
-    res.status(500).json({ error: 'Failed to read environment variables: ' + error.message });
-  }
-});
-
-app.post('/api/admin/env', (req, res) => {
-  try {
-    const { content } = req.body;
-    if (!content) {
-      return res.status(400).json({ error: 'No content provided' });
-    }
-    
-    const envPath = path.join(__dirname, '..', 'MaxBot', '.env');
-    
-    // Create a backup of the current .env file
-    if (fs.existsSync(envPath)) {
-      const backupPath = path.join(__dirname, '..', 'MaxBot', '.env.backup.' + Date.now());
-      fs.copyFileSync(envPath, backupPath);
-      console.log('Created backup of .env file at ' + backupPath);
-    }
-    
-    // Write the new content
-    fs.writeFileSync(envPath, content);
-    console.log('Environment variables updated successfully');
-    
-    res.json({ success: true, message: 'Environment variables updated successfully' });
-  } catch (error) {
-    console.error('Error saving env file:', error);
-    res.status(500).json({ error: 'Failed to save environment variables: ' + error.message });
-  }
-});
-
-// Add a new route for the environment editor page
-app.get('/env-editor', (req, res) => {
-  res.sendFile(path.join(__dirname, 'env-editor.html'));
-});
-
 // Serve HTML for the control panel
 app.get('/', (req, res) => {
   const html = `
@@ -1150,53 +1088,6 @@ app.get('/', (req, res) => {
         background-color: #0099ff;
         background-image: url('https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1');
       }
-      
-      /* Environment Editor Styles */
-      .env-editor-container {
-        margin: 15px 0;
-        border: 1px solid #444;
-        border-radius: 4px;
-        background-color: #1e1e1e;
-      }
-      
-      #env-editor {
-        padding: 10px;
-        background-color: #1e1e1e;
-        color: #f0f0f0;
-        border: none;
-        resize: vertical;
-        min-height: 300px;
-      }
-      
-      .env-help {
-        margin-top: 20px;
-        padding: 15px;
-        background-color: #2a2a2a;
-        border-radius: 4px;
-      }
-      
-      .env-help h3 {
-        margin-top: 0;
-        color: #ddd;
-      }
-      
-      .env-help ul {
-        padding-left: 20px;
-      }
-      
-      .env-help li {
-        margin-bottom: 8px;
-      }
-      
-      .warning-text {
-        color: #ffcc00;
-        font-weight: bold;
-      }
-      
-      .info-text {
-        color: #8ab4f8;
-        margin-bottom: 15px;
-      }
     </style>
   </head>
   <body>
@@ -1210,76 +1101,13 @@ app.get('/', (req, res) => {
       </div>
       
       <div class="tabs">
-        <button class="tab-button active" data-tab="status">Status</button>
-        <button class="tab-button" data-tab="logs">Logs</button>
-        <button class="tab-button" data-tab="chat">Chat</button>
-        <button class="tab-button" data-tab="commands">Commands</button>
-        <button class="tab-button" data-tab="dashboard">Dashboard</button>
-        <button class="tab-button" data-tab="env">Environment</button>
+        <div class="tab active" data-tab="dashboard">Dashboard</div>
+        <div class="tab" data-tab="chat">Chat</div>
+        <div class="tab" data-tab="logs">Logs</div>
+        <div class="tab" data-tab="admin">Admin</div>
       </div>
       
-      <div id="status-tab" class="tab-content active">
-        <div class="main-content">
-          <div class="panel">
-            <div class="panel-header">Bot Status</div>
-            <div id="bot-status-container">
-              <div class="status-display">
-                <div class="status-item">
-                  <span class="status-label">Current Status:</span>
-                  <span id="admin-bot-status" class="status-value">Unknown</span>
-                </div>
-                <div class="status-item">
-                  <span class="status-label">Uptime:</span>
-                  <span id="admin-bot-uptime" class="status-value">-</span>
-                </div>
-                <div class="status-item">
-                  <span class="status-label">Process ID:</span>
-                  <span id="admin-bot-pid" class="status-value">-</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div id="logs-tab" class="tab-content">
-        <div class="main-content">
-          <div class="panel">
-            <div class="panel-header">Logs</div>
-            <div id="logs-container" class="logs-container"></div>
-            <div class="commands-container" id="commands-container"></div>
-            <div class="input-container">
-              <input type="text" id="command-input" placeholder="Type a command...">
-              <button id="send-command">Execute</button>
-              <button id="exit-button" class="danger">Exit</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div id="chat-tab" class="tab-content">
-        <div class="main-content">
-          <div class="panel">
-            <div class="panel-header">Chat</div>
-            <div id="chat-container" class="chat-container"></div>
-            <div class="input-container">
-              <input type="text" id="chat-input" placeholder="Type a message...">
-              <button id="send-chat">Send</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div id="commands-tab" class="tab-content">
-        <div class="main-content">
-          <div class="panel">
-            <div class="panel-header">Commands</div>
-            <div id="commands-container" class="commands-container"></div>
-          </div>
-        </div>
-      </div>
-      
-      <div id="dashboard-tab" class="tab-content">
+      <div class="tab-content active" id="dashboard-tab">
         <div class="dashboard">
           <div class="stat-card">
             <h3>Bot Status</h3>
@@ -1365,26 +1193,81 @@ app.get('/', (req, res) => {
         </div>
       </div>
       
-      <div id="env-tab" class="tab-content">
+      <div class="tab-content" id="chat-tab">
         <div class="main-content">
           <div class="panel">
-            <div class="panel-header">Environment Variables</div>
-            <div class="env-editor-container">
-              <textarea id="env-editor" rows="15" style="width: 100%; font-family: monospace;"></textarea>
+            <div class="panel-header">Chat</div>
+            <div id="chat-container" class="chat-container"></div>
+            <div class="input-container">
+              <input type="text" id="chat-input" placeholder="Type a message...">
+              <button id="send-chat">Send</button>
             </div>
-            <div class="button-container">
-              <button id="save-env-btn" class="action-button">💾 Save Configuration</button>
-              <button id="reload-env-btn" class="action-button">🔄 Reload</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="logs-tab">
+        <div class="main-content">
+          <div class="panel">
+            <div class="panel-header">Logs</div>
+            <div id="logs-container" class="logs-container"></div>
+            <div class="commands-container" id="commands-container"></div>
+            <div class="input-container">
+              <input type="text" id="command-input" placeholder="Type a command...">
+              <button id="send-command">Execute</button>
+              <button id="exit-button" class="danger">Exit</button>
             </div>
-            <div class="env-help">
-              <h3>Common Configuration Variables</h3>
-              <ul>
-                <li><strong>BOT_USERNAME</strong>: Your bot's Twitch username</li>
-                <li><strong>CHANNEL_NAME</strong>: The Twitch channel where the bot will operate</li>
-                <li><strong>OAUTH_TOKEN</strong>: Your bot's OAuth token (get from <a href="https://twitchapps.com/tmi/" target="_blank">https://twitchapps.com/tmi/</a>)</li>
-                <li><strong>PREFIX</strong>: Command prefix (usually "!")</li>
-              </ul>
-              <p class="warning-text">⚠️ After saving, you'll need to restart the bot for changes to take effect.</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="admin-tab">
+        <div class="admin-panel">
+          <div class="panel">
+            <div class="panel-header">Bot Administration</div>
+            <div class="admin-content">
+              <div class="admin-section">
+                <h3>Bot Status</h3>
+                <div class="status-display">
+                  <div class="status-item">
+                    <span class="status-label">Current Status:</span>
+                    <span id="admin-bot-status" class="status-value">Unknown</span>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">Uptime:</span>
+                    <span id="admin-bot-uptime" class="status-value">-</span>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">Process ID:</span>
+                    <span id="admin-bot-pid" class="status-value">-</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="admin-section">
+                <h3>Bot Control</h3>
+                <div class="admin-controls">
+                  <button id="restart-bot" class="admin-button warning">
+                    <span class="button-icon">🔄</span> Restart Bot
+                  </button>
+                  <button id="shutdown-bot" class="admin-button danger">
+                    <span class="button-icon">⏹️</span> Shutdown Bot
+                  </button>
+                  <button id="start-bot" class="admin-button success">
+                    <span class="button-icon">▶️</span> Start Bot
+                  </button>
+                </div>
+                <div class="admin-note">
+                  <p><strong>Note:</strong> Restarting or shutting down the bot will disconnect it from Twitch chat temporarily.</p>
+                </div>
+              </div>
+              
+              <div class="admin-section">
+                <h3>Connection History</h3>
+                <div id="admin-connection-history" class="admin-history">
+                  <!-- Connection history will be populated here -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1422,27 +1305,20 @@ app.get('/', (req, res) => {
       const exitButton = document.getElementById('exit-button');
       
       // Tab switching
-      const tabButtons = document.querySelectorAll('.tab-button');
+      const tabs = document.querySelectorAll('.tab');
       const tabContents = document.querySelectorAll('.tab-content');
       
-      tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          const tabName = button.getAttribute('data-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabId = tab.getAttribute('data-tab');
           
-          // Hide all tab contents
-          tabContents.forEach(content => {
-            content.classList.remove('active');
-          });
+          // Remove active class from all tabs and contents
+          tabs.forEach(t => t.classList.remove('active'));
+          tabContents.forEach(c => c.classList.remove('active'));
           
-          // Remove active class from all buttons
-          tabButtons.forEach(btn => {
-            btn.classList.remove('active');
-          });
-          // Show the selected tab content
-          document.getElementById(`${tabName}-tab`).classList.add('active');
-          
-          // Add active class to the clicked button
-          button.classList.add('active');
+          // Add active class to selected tab and content
+          tab.classList.add('active');
+          document.getElementById(tabId + '-tab').classList.add('active');
         });
       });
       
@@ -2025,105 +1901,6 @@ app.get('/', (req, res) => {
           };
         }
       });
-
-      // Function to open the modal and load environment variables
-      function openEnvModal() {
-        document.getElementById('env-modal').style.display = 'block';
-        loadEnvVariables();
-      }
-
-      // Function to close the modal
-      function closeEnvModal() {
-        document.getElementById('env-modal').style.display = 'none';
-      }
-
-      // Function to load environment variables
-      function loadEnvVariables() {
-        fetch('/api/admin/env')
-          .then(response => response.json())
-          .then(data => {
-            if (data.content) {
-              document.getElementById('env-editor').value = data.content;
-            }
-          })
-          .catch(error => {
-            console.error('Error loading environment variables:', error);
-            alert('Failed to load environment variables: ' + error.message);
-          });
-      }
-
-      // Function to save environment variables
-      function saveEnvVariables() {
-        const envEditor = document.getElementById('env-editor');
-        if (confirm('Are you sure you want to save these changes? This will update your bot configuration.')) {
-          fetch('/api/admin/env', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content: envEditor.value })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              alert('Configuration saved successfully! Restart the bot for changes to take effect.');
-              closeEnvModal();
-            } else {
-              alert('Error: ' + (data.error || 'Unknown error'));
-            }
-          })
-          .catch(error => {
-            console.error('Error saving environment variables:', error);
-            alert('Failed to save configuration: ' + error.message);
-          });
-        }
-      }
-
-      // Set up tab switching
-      const tabButtons = document.querySelectorAll('.tab-button');
-      const tabContents = document.querySelectorAll('.tab-content');
-      
-      tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          const tabName = button.getAttribute('data-tab');
-          
-          // Hide all tab contents
-          tabContents.forEach(content => {
-            content.classList.remove('active');
-          });
-          
-          // Remove active class from all buttons
-          tabButtons.forEach(btn => {
-            btn.classList.remove('active');
-          });
-          
-          // Show the selected tab content
-          document.getElementById(tabName + '-tab').classList.add('active');
-          
-          // Add active class to the clicked button
-          button.classList.add('active');
-          
-          // Initialize the env editor when the env tab is selected
-          if (tabName === 'env') {
-            loadEnvVariables();
-          }
-        });
-      });
-      
-      // Set up environment editor buttons
-      const saveEnvBtn = document.getElementById('save-env-btn');
-      if (saveEnvBtn) {
-        saveEnvBtn.addEventListener('click', saveEnvVariables);
-      }
-      
-      const reloadEnvBtn = document.getElementById('reload-env-btn');
-      if (reloadEnvBtn) {
-        reloadEnvBtn.addEventListener('click', function() {
-          if (confirm('Reload the current configuration? Any unsaved changes will be lost.')) {
-            loadEnvVariables();
-          }
-        });
-      }
     </script>
   </body>
   </html>
