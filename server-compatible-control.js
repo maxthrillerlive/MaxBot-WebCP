@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const os = require('os');
+const { execFile } = require('child_process');
 
 // Generate a unique client ID
 const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
@@ -664,6 +665,40 @@ app.post('/api/admin/shutdown', (req, res) => {
     console.error('Error sending shutdown command:', error);
     appState.stats.errors++;
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Add a simple GET endpoint for starting the bot
+app.get('/api/admin/start-bot', (req, res) => {
+  console.log('Start bot endpoint called');
+  
+  try {
+    const scriptPath = path.join(__dirname, 'start-bot.js');
+    
+    console.log('Executing start script:', scriptPath);
+    
+    // Execute the start script
+    execFile(scriptPath, [], (error, stdout, stderr) => {
+      if (error) {
+        console.error('Error executing start script:', error);
+        console.error('stderr:', stderr);
+        return res.status(500).send('Error starting bot: ' + error.message);
+      }
+      
+      console.log('Start script output:', stdout);
+      
+      // Add to logs
+      const timestamp = new Date().toISOString();
+      appState.logs.push({
+        time: timestamp,
+        message: 'Bot start initiated via external script'
+      });
+      
+      return res.status(200).send('Bot start initiated');
+    });
+  } catch (error) {
+    console.error('Error starting bot:', error);
+    return res.status(500).send('Error starting bot: ' + error.message);
   }
 });
 
@@ -1809,30 +1844,32 @@ app.get('/', (req, res) => {
           startBtn.onclick = function() {
             console.log('Start button clicked');
             if (confirm('Are you sure you want to start the bot?')) {
-              fetch('/api/admin/start', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                }
+              // Use a simple GET endpoint that doesn't return JSON
+              fetch('/api/admin/start-bot', {
+                method: 'GET'
               })
               .then(function(response) {
-                // Check if the response is JSON
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                  return response.json();
-                } else {
-                  // If not JSON, handle as text
-                  return response.text().then(text => {
-                    throw new Error('Received non-JSON response: ' + text.substring(0, 100) + '...');
+                if (response.ok) {
+                  alert('Bot start initiated. Check logs for details.');
+                  
+                  // Add to logs
+                  const timestamp = new Date().toISOString();
+                  appState.logs.push({
+                    time: timestamp,
+                    message: 'Bot start initiated via external script'
                   });
-                }
-              })
-              .then(function(data) {
-                console.log('Start response:', data);
-                if (data.success) {
-                  alert('Bot started with PID: ' + data.pid);
+                  
+                  // Add to connection history
+                  appState.stats.connectionHistory.push({
+                    time: Date.now(),
+                    state: 'Start Requested',
+                    reason: 'User initiated start via external script'
+                  });
+                  
+                  // Refresh the admin panel after a short delay
+                  setTimeout(updateAdminPanel, 2000);
                 } else {
-                  alert('Error: ' + (data.error || 'Unknown error'));
+                  alert('Error starting bot. Check server logs for details.');
                 }
               })
               .catch(function(error) {
