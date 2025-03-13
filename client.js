@@ -107,7 +107,7 @@ class BotClient extends EventEmitter {
             this.ws.on('message', (data) => {
                 try {
                     const rawMessage = data.toString();
-                    console.log('Received raw message from server:', rawMessage.substring(0, 100) + (rawMessage.length > 100 ? '...' : ''));
+                    console.log('Received message from server:', rawMessage.substring(0, 100) + '...');
                     
                     // Try to parse the message
                     let message;
@@ -115,51 +115,34 @@ class BotClient extends EventEmitter {
                         message = JSON.parse(rawMessage);
                     } catch (parseError) {
                         console.error('Error parsing message:', parseError);
-                        this.safeLog(`{red-fg}Error parsing message from server: ${parseError.message}{/red-fg}`);
                         return;
                     }
                     
-                    // Check if this is an error message
-                    if (message.type === 'ERROR') {
-                        console.log('Received error message:', message.error);
-                        this.safeLog(`{red-fg}Server error: ${message.error}{/red-fg}`);
-                        return;
+                    // Extract status information from the message
+                    let statusUpdated = false;
+                    
+                    // Check for connection state
+                    if (message.data && message.data.connectionState) {
+                        this.botStatus.connected = message.data.connectionState === 'OPEN';
+                        statusUpdated = true;
                     }
                     
-                    // Extract channel information if available
+                    // Check for channel information
                     if (message.data && message.data.channels && message.data.channels.length > 0) {
-                        // Update the bot status with the channel information
                         this.botStatus.channel = message.data.channels[0];
-                        
-                        // Update the UI
-                        if (this.ui && typeof this.ui.updateStatus === 'function') {
-                            this.ui.updateStatus(this.botStatus);
-                        }
-                    } else if (message.channels && message.channels.length > 0) {
-                        // Update the bot status with the channel information
-                        this.botStatus.channel = message.channels[0];
-                        
-                        // Update the UI
-                        if (this.ui && typeof this.ui.updateStatus === 'function') {
-                            this.ui.updateStatus(this.botStatus);
-                        }
+                        statusUpdated = true;
                     }
                     
-                    // Extract uptime information if available
-                    if (message.data && message.data.uptime) {
+                    // Check for uptime information
+                    if (message.data && message.data.uptime !== undefined) {
                         this.botStatus.uptime = message.data.uptime;
-                        
-                        // Update the UI
-                        if (this.ui && typeof this.ui.updateStatus === 'function') {
-                            this.ui.updateStatus(this.botStatus);
-                        }
-                    } else if (message.uptime) {
-                        this.botStatus.uptime = message.uptime;
-                        
-                        // Update the UI
-                        if (this.ui && typeof this.ui.updateStatus === 'function') {
-                            this.ui.updateStatus(this.botStatus);
-                        }
+                        statusUpdated = true;
+                    }
+                    
+                    // If we extracted any status information, update the UI
+                    if (statusUpdated && this.ui && typeof this.ui.updateStatus === 'function') {
+                        console.log('Updating status with:', JSON.stringify(this.botStatus));
+                        this.ui.updateStatus(this.botStatus);
                     }
                     
                     // Handle different message types
