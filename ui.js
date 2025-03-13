@@ -75,44 +75,75 @@ class BotUI {
             });
             
             // Create admin panel with exit option
-            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.list, {
+            this.adminBox = this.grid.set(9, 0, 3, 12, blessed.box, {
                 label: ' Admin Panel ',
                 tags: true,
-                items: [
-                    '{red-fg}Exit Control Panel{/red-fg}'
-                ],
+                content: '{center}{bold}Press Enter to select an option{/bold}{/center}\n\n' +
+                         '{center}{red-fg}[Exit Control Panel]{/red-fg}{/center}\n\n' +
+                         '{center}Or press X to exit directly{/center}',
                 border: {
                     type: 'line',
                     fg: 'cyan'
                 },
                 style: {
-                    selected: {
-                        bg: 'cyan',
-                        fg: 'black'
-                    },
-                    item: {
-                        fg: 'white'
-                    },
+                    fg: 'white',
                     border: {
                         fg: 'cyan'
                     }
                 },
+                mouse: true,
                 keys: true,
-                vi: true,
-                mouse: true
+                clickable: true
             });
             
-            // Set up admin panel selection handler
-            this.adminBox.on('select', async (item) => {
-                const action = item.content;
-                if (action.includes('Exit Control Panel')) {
-                    const confirm = await this.showConfirmDialog('Are you sure you want to exit?');
-                    if (confirm) {
-                        this.exit();
-                        process.exit(0);
-                    }
+            // Add click handler for the exit option
+            this.adminBox.on('click', (data) => {
+                // Check if the click is on the exit option (roughly line 3)
+                if (data.y === 3) {
+                    console.log('Exit option clicked');
+                    this.confirmExit();
                 }
             });
+            
+            // Add a method to handle exit confirmation
+            this.confirmExit = () => {
+                const dialog = blessed.question({
+                    parent: this.screen,
+                    border: 'line',
+                    height: 'shrink',
+                    width: 'half',
+                    top: 'center',
+                    left: 'center',
+                    label: ' Confirm Exit ',
+                    tags: true,
+                    content: 'Are you sure you want to exit?',
+                    style: {
+                        fg: 'white',
+                        border: {
+                            fg: 'red'
+                        }
+                    }
+                });
+                
+                dialog.on('submit', (value) => {
+                    if (value) {
+                        console.log('Exit confirmed, shutting down');
+                        // Clean up resources
+                        if (this.statusPanel && typeof this.statusPanel.destroy === 'function') {
+                            this.statusPanel.destroy();
+                        }
+                        // Exit the process
+                        process.exit(0);
+                    } else {
+                        console.log('Exit cancelled');
+                        this.screen.render();
+                    }
+                });
+                
+                this.screen.append(dialog);
+                dialog.focus();
+                this.screen.render();
+            };
             
             // Mark as initialized
             this.initialized = true;
