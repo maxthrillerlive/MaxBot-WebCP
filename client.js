@@ -6,6 +6,7 @@ const fedora = require('./fedora');
 class BotClient extends EventEmitter {
     constructor(ui) {
         super();
+        console.log('BotClient constructor called with UI:', ui ? 'UI provided' : 'No UI provided');
         this.ui = ui;
         this.ws = null;
         this.isConnected = false;
@@ -40,6 +41,8 @@ class BotClient extends EventEmitter {
     }
 
     connect() {
+        console.log('BotClient.connect called, UI status:', 
+            this.ui ? (this.ui.isInitialized() ? 'UI initialized' : 'UI not initialized') : 'No UI');
         const wsUrl = process.env.BOT_SERVER_URL || 'ws://localhost:8080';
         
         // Don't try to connect if we're already connecting
@@ -76,9 +79,10 @@ class BotClient extends EventEmitter {
                     this.safeLog('{green-fg}Bot restart completed successfully{/green-fg}');
                 }
                 
-                // Render the screen if UI is available
+                // Force a render to ensure UI is displayed
                 if (this.ui && typeof this.ui.screen === 'object' && typeof this.ui.screen.render === 'function') {
-                    this.ui.screen.render();
+                    console.log('Forcing UI render after connection');
+                    setTimeout(() => this.ui.screen.render(), 100);
                 }
             });
 
@@ -415,6 +419,22 @@ class BotClient extends EventEmitter {
         if (this.ui && typeof this.ui.logToConsole === 'function' && !fedora.isEnabled) {
             console.log('UI is now ready, initializing Fedora integration');
             fedora.initialize(this, this.ui);
+        }
+    }
+
+    handleStatusUpdate(status) {
+        this.botStatus = status;
+        
+        // Update the UI if available
+        if (this.ui && typeof this.ui.updateStatus === 'function') {
+            this.ui.updateStatus(status);
+        } else {
+            console.log('Status update received but UI not ready:', JSON.stringify(status));
+        }
+        
+        // Update commands if available
+        if (status.commands && this.ui && typeof this.ui.updateCommands === 'function') {
+            this.ui.updateCommands(status.commands);
         }
     }
 }
