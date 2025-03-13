@@ -52,6 +52,13 @@ console.log('Starting MaxBot TUI...');
 // Create the PID file
 createPidFile();
 
+// Set up safety timeout
+console.log('Setting up safety timeout (15 seconds)');
+const safetyTimeout = setTimeout(() => {
+    console.log('Safety timeout reached, forcing exit');
+    process.exit(0);
+}, 15000);
+
 try {
     // Create and initialize the UI
     const ui = new BotUI();
@@ -59,12 +66,19 @@ try {
     
     // Set up the screen
     ui.setupScreen();
+    console.log('Setting up TUI screen...');
     
-    // Create a global variable for the client
-    global.client = null;
+    // Render the screen
+    ui.screen.render();
+    console.log('Rendering TUI screen...');
+    
+    // Log success
+    console.log('TUI setup complete');
     
     // Create the client
     global.client = new BotClient(ui);
+    console.log('BotClient constructor called with UI: UI provided');
+    console.log('BotClient initialized, deferring Fedora integration');
     console.log('Client created with UI');
     
     // Skip setting up event handlers
@@ -74,10 +88,27 @@ try {
     console.log('Application started successfully');
     
     // Update the UI with a message
-    ui.logToConsole('Application started in safe mode - some features may be limited');
+    ui.logToConsole('LOG: Application started in safe mode - some features may be limited');
+    
+    // Set up exit handlers for the UI
+    ui.screen.key(['escape', 'q', 'C-c'], function() {
+        clearTimeout(safetyTimeout);
+        console.log('Exit key pressed');
+        process.exit(0);
+    });
+    
+    // Set up a click handler for the admin panel if it exists
+    if (ui.adminBox) {
+        ui.adminBox.on('click', function() {
+            clearTimeout(safetyTimeout);
+            console.log('Admin panel clicked, exiting...');
+            process.exit(0);
+        });
+    }
     
 } catch (error) {
     console.error('Error starting application:', error);
+    clearTimeout(safetyTimeout);
     process.exit(1);
 }
 
