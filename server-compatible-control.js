@@ -11,16 +11,16 @@ const pidFile = path.join(__dirname, 'maxbot-tui.pid');
 fs.writeFileSync(pidFile, process.pid.toString());
 console.log(`PID file created at ${pidFile}`);
 
-// Application state
+// Initialize application state
 const appState = {
+  running: true,
   wsStatus: 'Disconnected',
-  logs: [],
-  startTime: Date.now(),
   wsMessages: 0,
-  lastPingTime: 0,
-  lastPongTime: 0,
   reconnectAttempts: 0,
-  serverErrors: []
+  lastPingTime: 0,
+  lastStatusTime: 0,
+  serverErrors: [],
+  logs: []
 };
 
 // Add log message
@@ -99,60 +99,40 @@ function connectToWebSocket() {
       appState.reconnectAttempts = 0;
       
       // Wait a short time before sending the first message
-      // This can help if the server needs time to initialize the connection
       setTimeout(() => {
         try {
-          // Send a simple ping message first to test the connection
-          const pingMessage = {
-            type: 'ping',
+          // Send a status request instead of ping
+          const statusRequest = {
+            type: 'GET_STATUS',
             client_id: clientId,
             timestamp: Date.now()
           };
           
-          ws.send(JSON.stringify(pingMessage));
-          addLog('Sent initial ping message');
-          
-          // Wait a bit before sending the status request
-          setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              try {
-                const statusRequest = {
-                  type: 'GET_STATUS',
-                  client_id: clientId,
-                  timestamp: Date.now()
-                };
-                
-                ws.send(JSON.stringify(statusRequest));
-                addLog('Sent status request');
-              } catch (e) {
-                addLog(`Error sending status request: ${e.message}`);
-              }
-            }
-          }, 1000);
-          
+          ws.send(JSON.stringify(statusRequest));
+          addLog('Sent status request');
         } catch (e) {
-          addLog(`Error sending initial ping: ${e.message}`);
+          addLog(`Error sending status request: ${e.message}`);
         }
       }, 500);
       
-      // Set up a ping interval to keep the connection alive
+      // Set up a status request interval instead of ping
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
-            // Send a ping message
-            const pingMessage = {
-              type: 'ping',
+            // Send a status request message
+            const statusRequest = {
+              type: 'GET_STATUS',
               client_id: clientId,
               timestamp: Date.now()
             };
             
-            ws.send(JSON.stringify(pingMessage));
+            ws.send(JSON.stringify(statusRequest));
             appState.lastPingTime = Date.now();
-            addLog('Sent ping message');
+            addLog('Sent periodic status request');
             
-            // Check if we've received a pong for the last ping
-            if (appState.lastPingTime - appState.lastPongTime > 30000 && appState.lastPongTime !== 0) {
-              addLog('No pong received for 30 seconds, reconnecting');
+            // Check if we've received a response for the last request
+            if (appState.lastPingTime - appState.lastStatusTime > 30000 && appState.lastStatusTime !== 0) {
+              addLog('No status response received for 30 seconds, reconnecting');
               clearInterval(pingInterval);
               try {
                 ws.terminate();
@@ -162,15 +142,15 @@ function connectToWebSocket() {
               setTimeout(() => connectToWebSocket(), 1000);
             }
           } catch (e) {
-            addLog(`Error sending ping: ${e.message}`);
+            addLog(`Error sending status request: ${e.message}`);
             clearInterval(pingInterval);
           }
         } else {
           // WebSocket is not open, clear the interval
-          addLog('WebSocket not open, clearing ping interval');
+          addLog('WebSocket not open, clearing status interval');
           clearInterval(pingInterval);
         }
-      }, 10000); // Send a ping every 10 seconds
+      }, 30000); // Send a status request every 30 seconds (less frequent to reduce load)
     });
     
     ws.on('message', (data) => {
@@ -196,6 +176,7 @@ function connectToWebSocket() {
             addLog('This appears to be a status message, handling as STATUS type');
             // Store the status information if needed
             appState.wsMessages++;
+            appState.lastStatusTime = Date.now(); // Update last status time
             return;
           }
           
@@ -206,13 +187,9 @@ function connectToWebSocket() {
         
         // Handle different message types
         switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
-          case 'PONG':
-            appState.lastPongTime = Date.now();
-            addLog('Received pong response');
-            break;
-            
           case 'STATUS':
             addLog(`Received status update`);
+            appState.lastStatusTime = Date.now(); // Update last status time
             break;
             
           case 'COMMANDS':
