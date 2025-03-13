@@ -1,4 +1,5 @@
 const blessed = require('blessed');
+const contrib = require('blessed-contrib');
 const dotenv = require('dotenv');
 
 // Load environment variables from .env file
@@ -8,6 +9,7 @@ class BotUI {
     constructor() {
         // Make blessed available to other modules
         this.blessed = blessed;
+        this.contrib = contrib;
         
         // Flag to track initialization
         this.initialized = false;
@@ -306,5 +308,4 @@ class BotUI {
     }
 }
 
-module.exports = BotUI; 
 module.exports = BotUI; 
