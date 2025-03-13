@@ -536,16 +536,17 @@ app.post('/api/chat', (req, res) => {
   }
   
   try {
-    // Use CHAT_COMMAND for server.js or EXECUTE_COMMAND for index.js
-    const chatMsg = {
-      type: 'CHAT_COMMAND',  // This works with server.js
-      message,
+    // Instead of using CHAT_COMMAND, use EXECUTE_COMMAND with a special format
+    // that tells the bot to send a message to the channel
+    const commandMsg = {
+      type: 'EXECUTE_COMMAND',
+      command: message, // The message itself becomes the command
       channel: channel || process.env.CHANNEL_NAME || '#channel',
       client_id: clientId,
       timestamp: Date.now()
     };
     
-    ws.send(JSON.stringify(chatMsg));
+    ws.send(JSON.stringify(commandMsg));
     appState.stats.messagesSent++;
     appState.stats.chatMessagesSent++;
     addLog(`Sent chat message: ${message}`);
