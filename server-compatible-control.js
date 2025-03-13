@@ -6,6 +6,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const os = require('os');
 
 // Generate a unique client ID
 const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
@@ -18,10 +19,27 @@ const appState = {
   reconnectAttempts: 0,
   lastPingTime: 0,
   lastStatusTime: 0,
+  lastPongTime: 0,
   serverErrors: [],
   logs: [],
-  chatMessages: [], // Add chat messages array
-  commands: [] // Add commands array
+  chatMessages: [],
+  commands: [],
+  // Add statistics tracking
+  stats: {
+    startTime: Date.now(),
+    messagesReceived: 0,
+    messagesSent: 0,
+    reconnections: 0,
+    commandsExecuted: 0,
+    chatMessagesSent: 0,
+    errors: 0,
+    lastStatusUpdate: null,
+    botUptime: 0,
+    botMemoryUsage: {},
+    botUsername: '',
+    botChannels: [],
+    connectionHistory: []
+  }
 };
 
 // Create a PID file
@@ -81,6 +99,26 @@ function addChatMessage(username, message, channel, badges = {}) {
   }
 }
 
+// Track connection state changes
+function trackConnectionState(state, reason = '') {
+  const timestamp = Date.now();
+  appState.stats.connectionHistory.push({
+    time: timestamp,
+    state: state,
+    reason: reason
+  });
+  
+  // Keep history to a reasonable size
+  if (appState.stats.connectionHistory.length > 100) {
+    appState.stats.connectionHistory.shift();
+  }
+  
+  // If reconnected, increment counter
+  if (state === 'Connected' && appState.stats.connectionHistory.length > 1) {
+    appState.stats.reconnections++;
+  }
+}
+
 // Connect to WebSocket server
 let ws = null;
 let pingInterval = null;
@@ -103,6 +141,7 @@ function connectToWebSocket() {
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         addLog('Connection timeout reached, closing socket');
+        trackConnectionState('Failed', 'Connection timeout');
         try {
           ws.terminate();
         } catch (e) {
@@ -128,6 +167,7 @@ function connectToWebSocket() {
       addLog('Connected to WebSocket server');
       appState.wsStatus = 'Connected';
       appState.reconnectAttempts = 0;
+      trackConnectionState('Connected');
       
       // Send GET_STATUS instead of register
       try {
@@ -138,9 +178,11 @@ function connectToWebSocket() {
         };
         
         ws.send(JSON.stringify(statusRequest));
+        appState.stats.messagesSent++;
         addLog('Sent status request');
       } catch (e) {
         addLog(`Error sending status request: ${e.message}`);
+        appState.stats.errors++;
       }
       
       // Set up ping interval to keep connection alive
@@ -156,6 +198,7 @@ function connectToWebSocket() {
             };
             
             ws.send(JSON.stringify(pingMsg));
+            appState.stats.messagesSent++;
             appState.lastPingTime = Date.now();
             addLog('Sent ping message');
             
@@ -170,15 +213,18 @@ function connectToWebSocket() {
                   };
                   
                   ws.send(JSON.stringify(statusRequest));
+                  appState.stats.messagesSent++;
                   addLog('Sent periodic status request');
                 } catch (e) {
                   addLog(`Error sending status request: ${e.message}`);
+                  appState.stats.errors++;
                 }
               }
             }, 5000); // 5 seconds after ping
             
           } catch (e) {
             addLog(`Error sending ping: ${e.message}`);
+            appState.stats.errors++;
             clearInterval(pingInterval);
           }
         } else {
@@ -194,6 +240,7 @@ function connectToWebSocket() {
         // Log the raw data for debugging
         const dataStr = data.toString();
         addLog(`Received raw data: ${dataStr}`);
+        appState.stats.messagesReceived++;
         
         // Check if the data is valid JSON
         if (!dataStr.trim().startsWith('{') && !dataStr.trim().startsWith('[')) {
@@ -213,6 +260,14 @@ function connectToWebSocket() {
             // Store the status information if needed
             appState.wsMessages++;
             appState.lastStatusTime = Date.now();
+            
+            // Update bot statistics
+            appState.stats.lastStatusUpdate = Date.now();
+            appState.stats.botUsername = message.username;
+            appState.stats.botChannels = message.channels || [];
+            appState.stats.botMemoryUsage = message.memory || {};
+            appState.stats.botUptime = message.uptime || 0;
+            
             return;
           }
           
@@ -224,7 +279,7 @@ function connectToWebSocket() {
         // Handle different message types
         switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
           case 'PONG':
-            appState.lastPingTime = Date.now();
+            appState.lastPongTime = Date.now();
             addLog('Received pong response');
             break;
             
@@ -232,10 +287,19 @@ function connectToWebSocket() {
             addLog(`Received status update`);
             appState.lastStatusTime = Date.now();
             
-            // Store commands if available
-            if (message.data && message.data.commands) {
-              appState.commands = message.data.commands;
-              addLog(`Updated commands list (${appState.commands.length} commands)`);
+            // Update bot statistics
+            if (message.data) {
+              appState.stats.lastStatusUpdate = Date.now();
+              appState.stats.botUsername = message.data.username || '';
+              appState.stats.botChannels = message.data.channels || [];
+              appState.stats.botMemoryUsage = message.data.memory || {};
+              appState.stats.botUptime = message.data.uptime || 0;
+              
+              // Store commands if available
+              if (message.data.commands) {
+                appState.commands = message.data.commands;
+                addLog(`Updated commands list (${appState.commands.length} commands)`);
+              }
             }
             break;
             
@@ -261,14 +325,18 @@ function connectToWebSocket() {
             break;
             
           case 'CONNECTION_STATE':
-            addLog(`Received connection state: ${message.state || 'unknown'}`);
+            const state = message.state || 'unknown';
+            addLog(`Received connection state: ${state}`);
+            trackConnectionState(`Server: ${state}`);
             break;
             
           case 'ERROR':
-            addLog(`Received error from server: ${message.error || 'Unknown error'}`);
+            const errorMsg = message.error || 'Unknown error';
+            addLog(`Received error from server: ${errorMsg}`);
+            appState.stats.errors++;
             appState.serverErrors.push({
               time: new Date().toISOString(),
-              error: message.error || 'Unknown error'
+              error: errorMsg
             });
             break;
             
@@ -277,12 +345,14 @@ function connectToWebSocket() {
         }
       } catch (error) {
         addLog(`Error processing message: ${error.message}`);
+        appState.stats.errors++;
       }
     });
     
     ws.on('close', (code, reason) => {
       addLog(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reason || 'No reason provided'})`);
       appState.wsStatus = 'Disconnected';
+      trackConnectionState('Disconnected', `Code: ${code}, Reason: ${reason || 'No reason provided'}`);
       clearInterval(pingInterval);
       
       // Implement exponential backoff for reconnection
@@ -300,6 +370,8 @@ function connectToWebSocket() {
     ws.on('error', (error) => {
       addLog(`WebSocket error: ${error.message}`);
       appState.wsStatus = 'Error';
+      appState.stats.errors++;
+      trackConnectionState('Error', error.message);
       appState.serverErrors.push({
         time: new Date().toISOString(),
         error: error.message
@@ -312,6 +384,8 @@ function connectToWebSocket() {
   } catch (error) {
     addLog(`Error creating WebSocket: ${error.message}`);
     appState.wsStatus = 'Error';
+    appState.stats.errors++;
+    trackConnectionState('Error', error.message);
     appState.serverErrors.push({
       time: new Date().toISOString(),
       error: error.message
@@ -356,6 +430,67 @@ app.get('/api/commands', (req, res) => {
   res.json(appState.commands);
 });
 
+app.get('/api/stats', (req, res) => {
+  // Calculate control panel uptime
+  const controlPanelUptime = Math.floor((Date.now() - appState.stats.startTime) / 1000);
+  
+  // Get system information
+  const systemInfo = {
+    platform: os.platform(),
+    arch: os.arch(),
+    cpus: os.cpus().length,
+    totalMemory: os.totalmem(),
+    freeMemory: os.freemem(),
+    uptime: os.uptime()
+  };
+  
+  // Format bot uptime
+  let botUptimeFormatted = '';
+  if (appState.stats.botUptime) {
+    const hours = Math.floor(appState.stats.botUptime / 3600);
+    const minutes = Math.floor((appState.stats.botUptime % 3600) / 60);
+    const seconds = appState.stats.botUptime % 60;
+    botUptimeFormatted = `${hours}h ${minutes}m ${seconds}s`;
+  }
+  
+  // Format control panel uptime
+  const cpHours = Math.floor(controlPanelUptime / 3600);
+  const cpMinutes = Math.floor((controlPanelUptime % 3600) / 60);
+  const cpSeconds = controlPanelUptime % 60;
+  const controlPanelUptimeFormatted = `${cpHours}h ${cpMinutes}m ${cpSeconds}s`;
+  
+  // Return combined stats
+  res.json({
+    bot: {
+      username: appState.stats.botUsername,
+      channels: appState.stats.botChannels,
+      uptime: appState.stats.botUptime,
+      uptimeFormatted: botUptimeFormatted,
+      memoryUsage: appState.stats.botMemoryUsage,
+      lastStatusUpdate: appState.stats.lastStatusUpdate
+    },
+    controlPanel: {
+      startTime: appState.stats.startTime,
+      uptime: controlPanelUptime,
+      uptimeFormatted: controlPanelUptimeFormatted,
+      messagesReceived: appState.stats.messagesReceived,
+      messagesSent: appState.stats.messagesSent,
+      reconnections: appState.stats.reconnections,
+      commandsExecuted: appState.stats.commandsExecuted,
+      chatMessagesSent: appState.stats.chatMessagesSent,
+      errors: appState.stats.errors,
+      connectionHistory: appState.stats.connectionHistory.slice(-10)
+    },
+    system: systemInfo,
+    connection: {
+      status: appState.wsStatus,
+      lastPingTime: appState.lastPingTime,
+      lastPongTime: appState.lastPongTime,
+      lastStatusTime: appState.lastStatusTime
+    }
+  });
+});
+
 app.post('/api/command', (req, res) => {
   const { command, channel } = req.body;
   
@@ -377,11 +512,14 @@ app.post('/api/command', (req, res) => {
     };
     
     ws.send(JSON.stringify(commandMsg));
+    appState.stats.messagesSent++;
+    appState.stats.commandsExecuted++;
     addLog(`Sent command: ${command}`);
     
     res.json({ success: true, message: `Command "${command}" sent` });
   } catch (error) {
     addLog(`Error sending command: ${error.message}`);
+    appState.stats.errors++;
     res.status(500).json({ error: error.message });
   }
 });
@@ -408,11 +546,14 @@ app.post('/api/chat', (req, res) => {
     };
     
     ws.send(JSON.stringify(chatMsg));
+    appState.stats.messagesSent++;
+    appState.stats.chatMessagesSent++;
     addLog(`Sent chat message: ${message}`);
     
     res.json({ success: true, message: `Chat message sent` });
   } catch (error) {
     addLog(`Error sending chat message: ${error.message}`);
+    appState.stats.errors++;
     res.status(500).json({ error: error.message });
   }
 });
@@ -436,7 +577,7 @@ app.get('/', (req, res) => {
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MaxBot TUI Control Panel</title>
+    <title>MaxBot Control Panel</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -474,6 +615,34 @@ app.get('/', (req, res) => {
       .connected { background-color: #4CAF50; }
       .disconnected { background-color: #F44336; }
       .error { background-color: #FF9800; }
+      
+      .tabs {
+        display: flex;
+        margin-bottom: 10px;
+      }
+      
+      .tab {
+        padding: 10px 20px;
+        background-color: #2d2d2d;
+        border-radius: 5px 5px 0 0;
+        margin-right: 5px;
+        cursor: pointer;
+      }
+      
+      .tab.active {
+        background-color: #3a3a3a;
+        font-weight: bold;
+      }
+      
+      .tab-content {
+        display: none;
+        flex: 1;
+        overflow: hidden;
+      }
+      
+      .tab-content.active {
+        display: flex;
+      }
       
       .main-content {
         display: flex;
@@ -591,9 +760,100 @@ app.get('/', (req, res) => {
         cursor: not-allowed;
       }
       
+      /* Dashboard styles */
+      .dashboard {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 10px;
+        overflow-y: auto;
+      }
+      
+      .stat-card {
+        background-color: #2d2d2d;
+        border-radius: 5px;
+        padding: 15px;
+        flex: 1;
+        min-width: 200px;
+      }
+      
+      .stat-card h3 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #4CAF50;
+        border-bottom: 1px solid #444;
+        padding-bottom: 5px;
+      }
+      
+      .stat-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      
+      .stat-label {
+        color: #aaa;
+      }
+      
+      .stat-value {
+        font-weight: bold;
+      }
+      
+      .memory-bar {
+        height: 20px;
+        background-color: #1a1a1a;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 5px;
+      }
+      
+      .memory-used {
+        height: 100%;
+        background-color: #4CAF50;
+      }
+      
+      .connection-history {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 10px;
+        background-color: #1a1a1a;
+        border-radius: 3px;
+        padding: 5px;
+      }
+      
+      .history-item {
+        padding: 5px;
+        border-bottom: 1px solid #333;
+      }
+      
+      .history-time {
+        color: #888;
+        font-size: 0.8em;
+      }
+      
+      .history-state {
+        margin-left: 10px;
+      }
+      
+      .history-state.connected {
+        color: #4CAF50;
+      }
+      
+      .history-state.disconnected {
+        color: #F44336;
+      }
+      
+      .history-state.error {
+        color: #FF9800;
+      }
+      
       @media (max-width: 768px) {
         .main-content {
           flex-direction: column;
+        }
+        
+        .stat-card {
+          min-width: 100%;
         }
       }
     </style>
@@ -601,31 +861,70 @@ app.get('/', (req, res) => {
   <body>
     <div class="container">
       <div class="header">
-        <h1>MaxBot TUI Control Panel</h1>
+        <h1>MaxBot Control Panel</h1>
         <div class="status">
           <div id="status-indicator" class="status-indicator disconnected"></div>
           <span id="status-text">Disconnected</span>
         </div>
       </div>
       
-      <div class="main-content">
-        <div class="panel">
-          <div class="panel-header">Chat</div>
-          <div id="chat-container" class="chat-container"></div>
-          <div class="input-container">
-            <input type="text" id="chat-input" placeholder="Type a message...">
-            <button id="send-chat">Send</button>
+      <div class="tabs">
+        <div class="tab active" data-tab="dashboard">Dashboard</div>
+        <div class="tab" data-tab="chat">Chat</div>
+        <div class="tab" data-tab="logs">Logs</div>
+      </div>
+      
+      <div class="tab-content active" id="dashboard-tab">
+        <div class="dashboard">
+          <div class="stat-card">
+            <h3>Bot Status</h3>
+            <div class="stat-item">
+              <span class="stat-label">Username:</span>
+              <span class="stat-value" id="bot-username">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Channels:</span>
+              <span class="stat-value" id="bot-channels">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Uptime:</span>
+              <span class="stat-value" id="bot-uptime">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Commands:</span>
+              <span class="stat-value" id="bot-commands">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Memory Usage:</span>
+              <span class="stat-value" id="bot-memory">-</span>
+            </div>
+            <div class="memory-bar">
+              <div class="memory-used" id="memory-bar" style="width: 0%"></div>
+            </div>
           </div>
-        </div>
-        
-        <div class="panel">
-          <div class="panel-header">Logs</div>
-          <div id="logs-container" class="logs-container"></div>
-          <div class="commands-container" id="commands-container"></div>
-          <div class="input-container">
-            <input type="text" id="command-input" placeholder="Type a command...">
-            <button id="send-command">Execute</button>
-            <button id="exit-button" class="danger">Exit</button>
+          
+          <div class="stat-card">
+            <h3>Control Panel</h3>
+            <div class="stat-item">
+              <span class="stat-label">Uptime:</span>
+              <span class="stat-value" id="cp-uptime">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Messages Received:</span>
+              <span class="stat-value" id="cp-messages-received">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Messages Sent:</span>
+              <span class="stat-value" id="cp-messages-sent">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Reconnections:</span>
+              <span class="stat-value" id="cp-reconnections">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Commands Executed:</span>
+              <span class="stat-value" id="cp-commands-executed">-</span>
+            </div>
           </div>
         </div>
       </div>
