@@ -372,35 +372,10 @@ class WebSocketClient {
     
     this.ws.on('close', (code, reason) => {
       const reasonStr = reason ? reason.toString() : 'No reason provided';
-      this.addLog(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reasonStr})`);
-      this.appState.wsStatus = 'Disconnected';
-      
-      // Only add to connection history if it's not a normal closure (code 1000)
-      // or if it's a normal closure but with a specific reason
-      if (code !== 1000 || reasonStr !== 'No reason provided') {
-        this.trackConnectionState('Disconnected', `Code: ${code}, Reason: ${reasonStr}`);
-      }
-      
-      clearInterval(this.pingInterval);
-      
-      // Implement exponential backoff for reconnection
-      const delay = Math.min(1000 * Math.pow(1.5, this.appState.reconnectAttempts - 1), 30000);
-      this.addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
-      
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = setTimeout(() => {
-        if (this.appState.running) {
-          this.addLog('Attempting to reconnect...');
-          
-          // Check if we're already connected before trying to reconnect
-          if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-            this.addLog('Already connected or connecting, skipping reconnection attempt');
-            return;
-          }
-          
-          this.connect();
-        }
-      }, delay);
+      this.handleClose({
+        code: code,
+        reason: reasonStr
+      });
     });
     
     this.ws.on('error', (error) => {
@@ -481,6 +456,54 @@ class WebSocketClient {
    */
   getReadyState() {
     return this.ws ? this.ws.readyState : WebSocket.CLOSED;
+  }
+
+  /**
+   * Handle WebSocket close event
+   * @param {Event} event - The close event
+   */
+  handleClose(event) {
+    this.addLog(`WebSocket connection closed: ${event.code} - ${event.reason}`);
+    this.trackConnectionState('Disconnected', `Connection closed: ${event.code} - ${event.reason}`);
+    
+    // Update app state
+    this.appState.wsStatus = 'Disconnected';
+    this.appState.twitchStatus = 'Unknown'; // Reset Twitch status when WebSocket is disconnected
+    
+    // Clear any existing ping interval
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    
+    // Schedule reconnect if not shutting down
+    if (this.appState.running) {
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff
+   */
+  scheduleReconnect() {
+    // Implement exponential backoff for reconnection
+    const delay = Math.min(1000 * Math.pow(1.5, this.appState.reconnectAttempts - 1), 30000);
+    this.addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
+    
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      if (this.appState.running) {
+        this.addLog('Attempting to reconnect...');
+        
+        // Check if we're already connected before trying to reconnect
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+          this.addLog('Already connected or connecting, skipping reconnection attempt');
+          return;
+        }
+        
+        this.connect();
+      }
+    }, delay);
   }
 }
 

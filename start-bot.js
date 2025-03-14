@@ -23,6 +23,30 @@ try {
     process.exit(1);
   }
   
+  // Check if the bot is already running by looking for the lock file
+  const lockFile = path.join(__dirname, '..', 'bot.lock');
+  if (fs.existsSync(lockFile)) {
+    try {
+      const pid = fs.readFileSync(lockFile, 'utf8');
+      log('Found existing lock file with PID: ' + pid);
+      
+      // Try to check if the process is running
+      try {
+        process.kill(parseInt(pid), 0); // This will throw an error if the process doesn't exist
+        log('Bot is already running with PID: ' + pid);
+        log('If you want to restart the bot, use the Restart button instead.');
+        process.exit(0);
+      } catch (e) {
+        // Process not found, safe to continue
+        log('Found stale lock file, removing...');
+        fs.unlinkSync(lockFile);
+      }
+    } catch (e) {
+      log('Error checking lock file: ' + e.message);
+      // Continue anyway
+    }
+  }
+  
   // Get the current Node executable path
   const nodePath = process.execPath;
   log('Node executable: ' + nodePath);

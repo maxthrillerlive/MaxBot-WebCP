@@ -472,8 +472,15 @@ app.get('/api/admin/start-bot', (req, res) => {
     
     console.log('Executing start script:', scriptPath);
     
-    // Execute the start script
-    execFile(scriptPath, [], (error, stdout, stderr) => {
+    // Check if the script exists
+    if (!fs.existsSync(scriptPath)) {
+      console.error('Start script not found:', scriptPath);
+      return res.status(500).send('Error: Start script not found');
+    }
+    
+    // Execute the start script with node
+    const nodePath = process.execPath;
+    execFile(nodePath, [scriptPath], (error, stdout, stderr) => {
       if (error) {
         console.error('Error executing start script:', error);
         console.error('stderr:', stderr);
@@ -499,15 +506,18 @@ app.get('/api/admin/start-bot', (req, res) => {
             reason: 'User initiated start via external script'
           });
         }
-      } else {
-        console.warn('Warning: appState is not defined, cannot update logs');
+        
+        // Update the status to reflect that we're attempting to start
+        appState.wsStatus = 'Connecting';
+        appState.twitchStatus = 'Connecting';
       }
       
-      return res.status(200).send('Bot start initiated');
+      // Return success
+      res.send('Bot start initiated');
     });
   } catch (error) {
-    console.error('Error starting bot:', error);
-    return res.status(500).send('Error starting bot: ' + error.message);
+    console.error('Error in start-bot endpoint:', error);
+    res.status(500).send('Error: ' + error.message);
   }
 });
 
