@@ -10,7 +10,7 @@ const { execFile } = require('child_process');
 const WebSocketClient = require('./websocket-client');
 
 // Generate a unique client ID
-const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
+const clientId = `MaxBot-WebCP-${uuidv4().substring(0, 8)}`;
 
 // Initialize application state
 const appState = {
@@ -47,7 +47,7 @@ const appState = {
 };
 
 // Create a PID file
-const pidFile = path.join(__dirname, 'maxbot-tui-control.pid');
+const pidFile = path.join(__dirname, 'maxbot-webcp-control.pid');
 fs.writeFileSync(pidFile, process.pid.toString());
 console.log(`PID file created at ${pidFile}`);
 
@@ -1312,12 +1312,14 @@ app.get('/', (req, res) => {
         fetch('/api/status')
           .then(response => response.json())
           .then(data => {
-            statusText.textContent = data.status;
+            // Update status text to show both WebSocket and Twitch status
+            statusText.textContent = 'WS: ' + data.wsStatus + ', Twitch: ' + data.twitchStatus;
             statusIndicator.className = 'status-indicator';
             
-            if (data.status === 'Connected') {
+            // If both are connected, show connected status
+            if (data.wsStatus === 'Connected' && data.twitchStatus === 'Connected') {
               statusIndicator.classList.add('connected');
-            } else if (data.status === 'Error') {
+            } else if (data.wsStatus === 'Error' || data.twitchStatus === 'Error') {
               statusIndicator.classList.add('error');
             } else {
               statusIndicator.classList.add('disconnected');
@@ -1992,7 +1994,7 @@ app.get('/', (req, res) => {
 // Start the server
 const PORT = process.env.HTTP_PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`MaxBot TUI HTTP Control started on http://localhost:${PORT}`);
+  console.log(`MaxBot WebCP HTTP Control started on http://localhost:${PORT}`);
   
   // Connect to WebSocket server
   connectToWebSocket();
@@ -2054,4 +2056,4 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-console.log('MaxBot TUI HTTP Control started'); 
+console.log('MaxBot WebCP HTTP Control started'); 
