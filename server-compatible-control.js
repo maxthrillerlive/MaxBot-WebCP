@@ -2,12 +2,12 @@
 
 const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const os = require('os');
 const { execFile } = require('child_process');
+const WebSocketClient = require('./websocket-client');
 
 // Generate a unique client ID
 const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
@@ -16,6 +16,7 @@ const clientId = `MaxBot-TUI-${uuidv4().substring(0, 8)}`;
 const appState = {
   running: true,
   wsStatus: 'Disconnected',
+  twitchStatus: 'Unknown',
   wsMessages: 0,
   reconnectAttempts: 0,
   lastPingTime: 0,
@@ -111,12 +112,12 @@ function trackConnectionState(state, reason = '') {
     appState.stats.connectionHistory[appState.stats.connectionHistory.length - 1] : null;
     
   if (lastEntry && lastEntry.state === state) {
-    // Update the timestamp of the existing entry instead of adding a new one
+    // If this is the same state as the last entry, just update the timestamp
+    // and add the reason if it wasn't there before
     lastEntry.time = timestamp;
     if (reason && !lastEntry.reason) {
       lastEntry.reason = reason;
     }
-    console.log('Updated existing connection history entry:', lastEntry);
     return;
   }
   
@@ -132,349 +133,26 @@ function trackConnectionState(state, reason = '') {
     appState.stats.connectionHistory.shift();
   }
   
-  // If reconnected, increment counter
-  if (state === 'Connected' && appState.stats.connectionHistory.length > 1) {
+  // If this is a reconnection, increment the counter
+  if (state === 'Connected' && lastEntry && lastEntry.state === 'Disconnected') {
     appState.stats.reconnections++;
   }
 }
 
-// Connect to WebSocket server
-let ws = null;
-let pingInterval = null;
+// Initialize WebSocket client
+const wsClient = new WebSocketClient(appState, addLog, trackConnectionState);
+wsClient.setAddChatMessageHandler(addChatMessage);
 
+// Connect to WebSocket server
 function connectToWebSocket() {
-  try {
-    // Get server URL from environment variables or use default
-    const host = process.env.WEBSOCKET_HOST || 'localhost';
-    const port = process.env.WEBSOCKET_PORT || '8080';
-    const serverUrl = `ws://${host}:${port}`;
-    
-    addLog(`Connecting to WebSocket server at: ${serverUrl}`);
-    appState.reconnectAttempts++;
-    
-    ws = new WebSocket(serverUrl, {
-      handshakeTimeout: 5000 // 5 seconds
-    });
-    
-    // Set up connection timeout
-    const connectionTimeout = setTimeout(() => {
-      if (ws.readyState !== WebSocket.OPEN) {
-        addLog('Connection timeout reached, closing socket');
-        trackConnectionState('Failed', 'Connection timeout');
-        try {
-          ws.terminate();
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-    }, 10000);
-    
-    // Handle WebSocket-level ping (automatically responds with pong)
-    ws.on('ping', () => {
-      addLog('Received WebSocket ping');
-      // The ws library automatically responds with a pong
-    });
-    
-    // Handle WebSocket-level pong
-    ws.on('pong', () => {
-      addLog('Received WebSocket pong');
-      appState.lastPongTime = Date.now();
-    });
-    
-    ws.on('open', () => {
-      clearTimeout(connectionTimeout);
-      addLog('Connected to WebSocket server');
-      appState.wsStatus = 'Connected';
-      appState.reconnectAttempts = 0;
-      trackConnectionState('Connected');
-      
-      // Send GET_STATUS instead of register
-      try {
-        const statusRequest = {
-          type: 'GET_STATUS',  // This is recognized by index.js
-          client_id: clientId,
-          timestamp: Date.now()
-        };
-        
-        ws.send(JSON.stringify(statusRequest));
-        appState.stats.messagesSent++;
-        addLog('Sent status request');
-      } catch (e) {
-        addLog(`Error sending status request: ${e.message}`);
-        appState.stats.errors++;
-      }
-      
-      // Set up ping interval to keep connection alive
-      clearInterval(pingInterval);
-      pingInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try {
-            // Send application-level ping message
-            const pingMsg = {
-              type: 'ping',
-              client_id: clientId,
-              timestamp: Date.now()
-            };
-            
-            ws.send(JSON.stringify(pingMsg));
-            appState.stats.messagesSent++;
-            appState.lastPingTime = Date.now();
-            addLog('Sent ping message');
-            
-            // Also send a status request periodically
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                try {
-                  const statusRequest = {
-                    type: 'GET_STATUS',
-                    client_id: clientId,
-                    timestamp: Date.now()
-                  };
-                  
-                  ws.send(JSON.stringify(statusRequest));
-                  appState.stats.messagesSent++;
-                  addLog('Sent periodic status request');
-                } catch (e) {
-                  addLog(`Error sending status request: ${e.message}`);
-                  appState.stats.errors++;
-                }
-              }
-            }, 5000); // 5 seconds after ping
-            
-          } catch (e) {
-            addLog(`Error sending ping: ${e.message}`);
-            appState.stats.errors++;
-            clearInterval(pingInterval);
-          }
-        } else {
-          // WebSocket is not open, clear the interval
-          addLog('WebSocket not open, clearing ping interval');
-          clearInterval(pingInterval);
-        }
-      }, 20000); // Send ping every 20 seconds (server checks every 60)
-    });
-    
-    ws.on('message', (data) => {
-      try {
-        // Log the raw data for debugging
-        const dataStr = data.toString();
-        addLog(`Received raw data: ${dataStr}`);
-        appState.stats.messagesReceived++;
-        
-        // Check if the data is valid JSON
-        if (!dataStr.trim().startsWith('{') && !dataStr.trim().startsWith('[')) {
-          addLog(`Received non-JSON data: ${dataStr}`);
-          return;
-        }
-        
-        const message = JSON.parse(dataStr);
-        
-        // Check if the message has a type
-        if (!message.type) {
-          addLog(`Received message without type: ${JSON.stringify(message)}`);
-          
-          // Try to determine if this is a status message
-          if (message.connectionState && message.username) {
-            addLog('This appears to be a status message, handling as STATUS type');
-            // Store the status information if needed
-            appState.wsMessages++;
-            appState.lastStatusTime = Date.now();
-            
-            // Update bot statistics
-            appState.stats.lastStatusUpdate = Date.now();
-            appState.stats.botUsername = message.username;
-            appState.stats.botChannels = message.channels || [];
-            appState.stats.botMemoryUsage = message.memory || {};
-            appState.stats.botUptime = message.uptime || 0;
-            
-            // Store the process ID
-            appState.stats.botPid = message.processId;
-            
-            // Update connection state
-            appState.wsStatus = message.connectionState || 'Unknown';
-            
-            // Store the entire status object for reference
-            appState.stats.botStatus = message;
-            
-            // Store commands if available
-            if (message.commands) {
-              appState.commands = message.commands;
-              addLog(`Updated commands list (${appState.commands.length} commands)`);
-            }
-            
-            // Log the status for debugging
-            console.log('Bot status updated:', {
-              username: appState.stats.botUsername,
-              pid: appState.stats.botPid,
-              status: appState.wsStatus,
-              uptime: appState.stats.botUptime
-            });
-            
-            return;
-          }
-          
-          return;
-        }
-        
-        appState.wsMessages++;
-        
-        // Handle different message types
-        switch (message.type.toUpperCase()) {  // Convert to uppercase for case-insensitive comparison
-          case 'PONG':
-            appState.lastPongTime = Date.now();
-            addLog('Received pong response');
-            break;
-            
-          case 'STATUS':
-            addLog(`Received status update`);
-            appState.lastStatusTime = Date.now();
-            
-            // Update bot statistics
-            if (message.data) {
-              appState.stats.lastStatusUpdate = Date.now();
-              appState.stats.botUsername = message.data.username || '';
-              appState.stats.botChannels = message.data.channels || [];
-              appState.stats.botMemoryUsage = message.data.memory || {};
-              appState.stats.botUptime = message.data.uptime || 0;
-              
-              // Store the process ID
-              appState.stats.botPid = message.data.processId;
-              
-              // Update connection state
-              appState.wsStatus = message.data.connectionState || 'Unknown';
-              
-              // Store the entire status object for reference
-              appState.stats.botStatus = message.data;
-              
-              // Log the status for debugging
-              console.log('Bot status updated:', {
-                username: appState.stats.botUsername,
-                pid: appState.stats.botPid,
-                status: appState.wsStatus,
-                uptime: appState.stats.botUptime
-              });
-              
-              // Store commands if available
-              if (message.data.commands) {
-                appState.commands = message.data.commands;
-                addLog(`Updated commands list (${appState.commands.length} commands)`);
-              }
-            }
-            break;
-            
-          case 'COMMANDS':
-            addLog(`Received commands list`);
-            if (message.data) {
-              appState.commands = message.data;
-              addLog(`Updated commands list (${appState.commands.length} commands)`);
-            }
-            break;
-            
-          case 'CHAT_MESSAGE':
-            const chatData = message.data || {};
-            addLog(`Received chat message from ${chatData.username || 'unknown'}`);
-            
-            // Add to chat messages
-            addChatMessage(
-              chatData.username || 'unknown',
-              chatData.message || '',
-              chatData.channel || '#unknown',
-              chatData.badges || {}
-            );
-            break;
-            
-          case 'CONNECTION_STATE':
-            const state = message.state || 'unknown';
-            addLog(`Received connection state: ${state}`);
-            
-            // Update the connection state
-            appState.wsStatus = state;
-            console.log('Connection state updated:', state);
-            
-            // Add to connection history
-            trackConnectionState(`Server: ${state}`, message.reason || '');
-            break;
-            
-          case 'ERROR':
-            const errorMsg = message.error || 'Unknown error';
-            addLog(`Received error from server: ${errorMsg}`);
-            appState.stats.errors++;
-            appState.serverErrors.push({
-              time: new Date().toISOString(),
-              error: errorMsg
-            });
-            break;
-            
-          default:
-            addLog(`Received message of type: ${message.type}`);
-        }
-      } catch (error) {
-        addLog(`Error processing message: ${error.message}`);
-        appState.stats.errors++;
-      }
-    });
-    
-    ws.on('close', (code, reason) => {
-      addLog(`Disconnected from WebSocket server (Code: ${code}, Reason: ${reason || 'No reason provided'})`);
-      appState.wsStatus = 'Disconnected';
-      trackConnectionState('Disconnected', `Code: ${code}, Reason: ${reason || 'No reason provided'}`);
-      clearInterval(pingInterval);
-      
-      // Implement exponential backoff for reconnection
-      const delay = Math.min(1000 * Math.pow(1.5, appState.reconnectAttempts - 1), 30000);
-      addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
-      
-      setTimeout(() => {
-        if (appState.running) {
-          addLog('Attempting to reconnect...');
-          connectToWebSocket();
-        }
-      }, delay);
-    });
-    
-    ws.on('error', (error) => {
-      addLog(`WebSocket error: ${error.message}`);
-      appState.wsStatus = 'Error';
-      appState.stats.errors++;
-      trackConnectionState('Error', error.message);
-      appState.serverErrors.push({
-        time: new Date().toISOString(),
-        error: error.message
-      });
-      
-      // Don't need to close here, the 'close' event will be triggered automatically
-    });
-    
-    return ws;
-  } catch (error) {
-    addLog(`Error creating WebSocket: ${error.message}`);
-    appState.wsStatus = 'Error';
-    appState.stats.errors++;
-    trackConnectionState('Error', error.message);
-    appState.serverErrors.push({
-      time: new Date().toISOString(),
-      error: error.message
-    });
-    
-    // Implement exponential backoff for reconnection
-    const delay = Math.min(1000 * Math.pow(1.5, appState.reconnectAttempts - 1), 30000);
-    addLog(`Will attempt to reconnect in ${delay/1000} seconds`);
-    
-    setTimeout(() => {
-      if (appState.running) {
-        addLog('Attempting to reconnect...');
-        connectToWebSocket();
-      }
-    }, delay);
-    
-    return null;
-  }
+  wsClient.connect();
 }
 
 // API endpoints
 app.get('/api/status', (req, res) => {
   res.json({
-    status: appState.wsStatus,
+    wsStatus: appState.wsStatus,
+    twitchStatus: appState.twitchStatus,
     messages: appState.wsMessages,
     reconnectAttempts: appState.reconnectAttempts,
     errors: appState.serverErrors.slice(-10) // Return last 10 errors
@@ -527,6 +205,7 @@ app.get('/api/stats', (req, res) => {
   // Log the current status for debugging
   console.log('Current bot status:', {
     wsStatus: appState.wsStatus,
+    twitchStatus: appState.twitchStatus,
     botUsername: appState.stats.botUsername,
     botPid: appState.stats.botPid,
     botUptime: appState.stats.botUptime,
@@ -543,7 +222,7 @@ app.get('/api/stats', (req, res) => {
       memoryUsage: appState.stats.botMemoryUsage,
       lastStatusUpdate: appState.stats.lastStatusUpdate,
       pid: appState.stats.botPid,
-      status: appState.wsStatus
+      status: appState.twitchStatus
     },
     controlPanel: {
       startTime: appState.stats.startTime,
@@ -559,7 +238,8 @@ app.get('/api/stats', (req, res) => {
     },
     system: systemInfo,
     connection: {
-      status: appState.wsStatus,
+      wsStatus: appState.wsStatus,
+      twitchStatus: appState.twitchStatus,
       lastPingTime: appState.lastPingTime,
       lastPongTime: appState.lastPongTime,
       lastStatusTime: appState.lastStatusTime
@@ -568,35 +248,33 @@ app.get('/api/stats', (req, res) => {
 });
 
 app.post('/api/command', (req, res) => {
-  const { command, channel } = req.body;
+  const { command, args } = req.body;
   
   if (!command) {
     return res.status(400).json({ error: 'Command is required' });
   }
   
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!wsClient.isConnected()) {
     return res.status(503).json({ error: 'WebSocket is not connected' });
   }
   
   try {
+    // Create command message
     const commandMsg = {
-      type: 'EXECUTE_COMMAND',
-      command,
-      channel: channel || process.env.CHANNEL_NAME || '#channel',
-      client_id: clientId,
+      type: 'COMMAND',
+      command: command,
+      args: args || [],
       timestamp: Date.now()
     };
     
-    ws.send(JSON.stringify(commandMsg));
+    wsClient.sendMessage(commandMsg);
     appState.stats.messagesSent++;
     appState.stats.commandsExecuted++;
-    addLog(`Sent command: ${command}`);
     
-    res.json({ success: true, message: `Command "${command}" sent` });
+    return res.json({ success: true, message: `Command ${command} sent` });
   } catch (error) {
-    addLog(`Error sending command: ${error.message}`);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
+    console.error('Error sending command:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -607,37 +285,35 @@ app.post('/api/chat', (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
   
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!wsClient.isConnected()) {
     return res.status(503).json({ error: 'WebSocket is not connected' });
   }
   
   try {
-    // Use the actual channel from the bot's status if available
-    const targetChannel = channel || 
-                         (appState.stats.botChannels && appState.stats.botChannels.length > 0 ? 
-                          appState.stats.botChannels[0] : 
-                          process.env.CHANNEL_NAME || '#maxthriller');
+    // Use the channel from the request or default to the first channel
+    const targetChannel = channel || (appState.stats.botChannels.length > 0 ? appState.stats.botChannels[0] : null);
     
-    // Use CHAT_COMMAND type which is recognized by index.js
+    if (!targetChannel) {
+      return res.status(400).json({ error: 'No channel available' });
+    }
+    
+    // Create chat message
     const chatMsg = {
-      type: 'CHAT_COMMAND',
+      type: 'CHAT',
       message: message,
       channel: targetChannel,
-      client_id: clientId,
       timestamp: Date.now()
     };
     
     addLog(`Sending message to channel: ${targetChannel}`);
-    ws.send(JSON.stringify(chatMsg));
+    wsClient.sendMessage(chatMsg);
     appState.stats.messagesSent++;
     appState.stats.chatMessagesSent++;
-    addLog(`Sent chat message: ${message}`);
     
-    res.json({ success: true, message: `Chat message sent to ${targetChannel}` });
+    return res.json({ success: true, message: `Message sent to ${targetChannel}` });
   } catch (error) {
-    addLog(`Error sending chat message: ${error.message}`);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
+    console.error('Error sending chat message:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -656,26 +332,27 @@ app.post('/api/exit', (req, res) => {
 app.post('/api/admin/restart', (req, res) => {
   console.log('Restart API endpoint called');
   
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!wsClient.isConnected()) {
     console.error('WebSocket is not connected');
     return res.status(503).json({ error: 'WebSocket is not connected' });
   }
   
   try {
+    // Create restart message
     const restartMsg = {
-      type: 'RESTART_BOT',
-      client_id: clientId,
+      type: 'ADMIN_COMMAND',
+      command: 'RESTART',
       timestamp: Date.now()
     };
     
     console.log('Sending restart command via WebSocket');
-    ws.send(JSON.stringify(restartMsg));
+    wsClient.sendMessage(restartMsg);
     
     // Add to logs
     const timestamp = new Date().toISOString();
     appState.logs.push({
       time: timestamp,
-      message: 'Sent restart command to bot'
+      message: 'Restart command sent'
     });
     
     // Add to connection history
@@ -685,38 +362,37 @@ app.post('/api/admin/restart', (req, res) => {
       reason: 'User initiated restart via API'
     });
     
-    console.log('Restart command sent successfully');
-    res.json({ success: true, message: 'Restart command sent' });
+    return res.json({ success: true, message: 'Restart command sent' });
   } catch (error) {
     console.error('Error sending restart command:', error);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/admin/shutdown', (req, res) => {
   console.log('Shutdown API endpoint called');
   
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!wsClient.isConnected()) {
     console.error('WebSocket is not connected');
     return res.status(503).json({ error: 'WebSocket is not connected' });
   }
   
   try {
+    // Create shutdown message
     const shutdownMsg = {
-      type: 'EXIT_BOT',
-      client_id: clientId,
+      type: 'ADMIN_COMMAND',
+      command: 'SHUTDOWN',
       timestamp: Date.now()
     };
     
     console.log('Sending shutdown command via WebSocket');
-    ws.send(JSON.stringify(shutdownMsg));
+    wsClient.sendMessage(shutdownMsg);
     
     // Add to logs
     const timestamp = new Date().toISOString();
     appState.logs.push({
       time: timestamp,
-      message: 'Sent shutdown command to bot'
+      message: 'Shutdown command sent'
     });
     
     // Add to connection history
@@ -726,12 +402,10 @@ app.post('/api/admin/shutdown', (req, res) => {
       reason: 'User initiated shutdown via API'
     });
     
-    console.log('Shutdown command sent successfully');
-    res.json({ success: true, message: 'Shutdown command sent' });
+    return res.json({ success: true, message: 'Shutdown command sent' });
   } catch (error) {
     console.error('Error sending shutdown command:', error);
-    appState.stats.errors++;
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -753,12 +427,21 @@ app.post('/api/connect', (req, res) => {
     process.env.WEBSOCKET_HOST = host;
     process.env.WEBSOCKET_PORT = port;
     
+    // Add to connection history
+    trackConnectionState('Connection Requested', `Manual connection to ${host}:${port}`);
+    
     // Close existing WebSocket connection if open
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (wsClient.isConnected()) {
       addLog(`Closing existing WebSocket connection to reconnect to ${host}:${port}`);
-      ws.close();
+      wsClient.close(1000, "User initiated reconnection");
+      
+      // Wait a moment for the close event to be processed
+      setTimeout(() => {
+        addLog(`Connecting to new WebSocket server at ${host}:${port}`);
+        connectToWebSocket();
+      }, 1000);
     } else {
-      // If not open or no connection exists, connect immediately
+      // If no connection exists, connect immediately
       addLog(`Connecting to new WebSocket server at ${host}:${port}`);
       connectToWebSocket();
     }
@@ -770,19 +453,12 @@ app.post('/api/connect', (req, res) => {
       message: `Connection to ${host}:${port} initiated`
     });
     
-    // Add to connection history
-    appState.stats.connectionHistory.push({
-      time: Date.now(),
-      state: 'Connection Requested',
-      reason: `Manual connection to ${host}:${port}`
-    });
-    
     console.log(`Connection to ${host}:${port} initiated`);
-    res.json({ success: true, message: `Connecting to ${host}:${port}...` });
+    return res.json({ success: true, message: `Connecting to ${host}:${port}...` });
   } catch (error) {
     console.error('Error connecting to WebSocket server:', error);
     appState.stats.errors++;
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -2327,19 +2003,16 @@ function cleanup() {
   addLog('Cleaning up...');
   
   // Close WebSocket connection
-  if (ws) {
+  if (wsClient) {
     try {
-      if (ws.readyState === WebSocket.OPEN) {
-        // Don't send a disconnect message, just close the connection
-        ws.close();
-      }
+      wsClient.close(1000, "Server shutting down");
+      addLog('WebSocket connection closed');
     } catch (e) {
-      addLog(`Error closing WebSocket: ${e.message}`);
+      addLog(`Error closing WebSocket connection: ${e.message}`);
     }
   }
   
   // Clear intervals
-  clearInterval(pingInterval);
   clearTimeout(safetyTimeout);
   
   // Remove PID file
