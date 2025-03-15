@@ -521,6 +521,190 @@ app.get('/api/admin/start-bot', (req, res) => {
   }
 });
 
+// Add a new API endpoint for plugins
+app.get('/api/plugins', (req, res) => {
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    // Create plugin status request message
+    const pluginMsg = {
+      type: 'GET_PLUGINS',
+      timestamp: Date.now()
+    };
+    
+    // Send the message and wait for response
+    wsClient.sendMessage(pluginMsg);
+    
+    // Since we don't have a direct way to get the response,
+    // we'll return a success message and the client can poll for updates
+    return res.json({ success: true, message: 'Plugin status request sent' });
+  } catch (error) {
+    console.error('Error requesting plugin status:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/plugins/:name/enable', (req, res) => {
+  const pluginName = req.params.name;
+  
+  if (!pluginName) {
+    return res.status(400).json({ error: 'Plugin name is required' });
+  }
+  
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    // Create plugin enable message
+    const enableMsg = {
+      type: 'ENABLE_PLUGIN',
+      plugin: pluginName,
+      timestamp: Date.now()
+    };
+    
+    // Send the message
+    wsClient.sendMessage(enableMsg);
+    
+    // Add to logs
+    addLog(`Enabling plugin: ${pluginName}`);
+    
+    return res.json({ success: true, message: `Plugin ${pluginName} enable request sent` });
+  } catch (error) {
+    console.error('Error enabling plugin:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/plugins/:name/disable', (req, res) => {
+  const pluginName = req.params.name;
+  
+  if (!pluginName) {
+    return res.status(400).json({ error: 'Plugin name is required' });
+  }
+  
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    // Create plugin disable message
+    const disableMsg = {
+      type: 'DISABLE_PLUGIN',
+      plugin: pluginName,
+      timestamp: Date.now()
+    };
+    
+    // Send the message
+    wsClient.sendMessage(disableMsg);
+    
+    // Add to logs
+    addLog(`Disabling plugin: ${pluginName}`);
+    
+    return res.json({ success: true, message: `Plugin ${pluginName} disable request sent` });
+  } catch (error) {
+    console.error('Error disabling plugin:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/plugins/:name/config', (req, res) => {
+  const pluginName = req.params.name;
+  const config = req.body;
+  
+  if (!pluginName) {
+    return res.status(400).json({ error: 'Plugin name is required' });
+  }
+  
+  if (!config) {
+    return res.status(400).json({ error: 'Configuration is required' });
+  }
+  
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    // Create plugin config message
+    const configMsg = {
+      type: 'CONFIGURE_PLUGIN',
+      plugin: pluginName,
+      config: config,
+      timestamp: Date.now()
+    };
+    
+    // Send the message
+    wsClient.sendMessage(configMsg);
+    
+    // Add to logs
+    addLog(`Configuring plugin: ${pluginName}`);
+    
+    return res.json({ success: true, message: `Plugin ${pluginName} configuration request sent` });
+  } catch (error) {
+    console.error('Error configuring plugin:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Add API endpoints for configuration
+app.get('/api/config', (req, res) => {
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  try {
+    // Create config request message
+    const configMsg = {
+      type: 'GET_CONFIG',
+      timestamp: Date.now()
+    };
+    
+    // Send the message and wait for response
+    wsClient.sendMessage(configMsg);
+    
+    // Since we don't have a direct way to get the response,
+    // we'll return a success message and the client can poll for updates
+    return res.json({ success: true, message: 'Configuration request sent' });
+  } catch (error) {
+    console.error('Error requesting configuration:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/config', (req, res) => {
+  if (!wsClient.isConnected()) {
+    return res.status(503).json({ error: 'WebSocket is not connected' });
+  }
+  
+  const config = req.body;
+  
+  if (!config) {
+    return res.status(400).json({ error: 'Configuration data is required' });
+  }
+  
+  try {
+    // Create config update message
+    const configMsg = {
+      type: 'UPDATE_CONFIG',
+      config: config,
+      timestamp: Date.now()
+    };
+    
+    // Send the message
+    wsClient.sendMessage(configMsg);
+    
+    // Add to logs
+    addLog(`Updating configuration`);
+    
+    return res.json({ success: true, message: 'Configuration update request sent' });
+  } catch (error) {
+    console.error('Error updating configuration:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Serve HTML for the control panel
 app.get('/', (req, res) => {
   const html = `
@@ -1080,6 +1264,8 @@ app.get('/', (req, res) => {
         <div class="tab" data-tab="chat">Chat</div>
         <div class="tab" data-tab="logs">Logs</div>
         <div class="tab" data-tab="admin">Admin</div>
+        <a href="/plugins.html" class="tab" style="text-decoration: none; color: inherit;">Plugins</a>
+        <a href="/config.html" class="tab" style="text-decoration: none; color: inherit;">Config</a>
       </div>
       
       <div class="tab-content active" id="dashboard-tab">
@@ -1371,6 +1557,9 @@ app.get('/', (req, res) => {
             // Clear the container
             chatContainer.innerHTML = '';
             
+            // Apply chat styles from localStorage if available
+            applyChatStyles();
+            
             // Loop through each message
             for (let i = 0; i < chatMessages.length; i++) {
               const entry = chatMessages[i];
@@ -1394,24 +1583,37 @@ app.get('/', (req, res) => {
               timeSpan.style.fontSize = '16px';
               timeSpan.textContent = '[' + new Date(entry.time).toLocaleTimeString() + ']';
               
+              // Check if we should show timestamps
+              const showTimestamps = window.chatConfig ? window.chatConfig.showTimestamps : true;
+              if (!showTimestamps) {
+                timeSpan.style.display = 'none';
+              } else if (window.chatConfig && window.chatConfig.chatColors && window.chatConfig.chatColors.timestamp) {
+                timeSpan.style.color = window.chatConfig.chatColors.timestamp;
+              }
+              
               // Create badges
               let badgeText = '';
               
-              // Check username for special badges
-              if (entry.username.toLowerCase() === 'max2d2') {
-                badgeText += '🤖 '; // Bot badge
-              }
+              // Check if we should show badges
+              const showBadges = window.chatConfig ? window.chatConfig.showBadges : true;
               
-              if (entry.username.toLowerCase() === 'maxthriller') {
-                badgeText += '📺 '; // Broadcaster badge
-              }
-              
-              // Check badges object if it exists
-              if (entry.badges) {
-                if (entry.badges.moderator) badgeText += '🛡️ ';
-                if (entry.badges.vip) badgeText += '⭐ ';
-                if (entry.badges.subscriber) badgeText += '💎 ';
-                if (entry.badges.premium) badgeText += '�� ';
+              if (showBadges) {
+                // Check username for special badges
+                if (entry.username.toLowerCase() === 'max2d2') {
+                  badgeText += '🤖 '; // Bot badge
+                }
+                
+                if (entry.username.toLowerCase() === 'maxthriller') {
+                  badgeText += '📺 '; // Broadcaster badge
+                }
+                
+                // Check badges object if it exists
+                if (entry.badges) {
+                  if (entry.badges.moderator) badgeText += '🛡️ ';
+                  if (entry.badges.vip) badgeText += '⭐ ';
+                  if (entry.badges.subscriber) badgeText += '💎 ';
+                  if (entry.badges.premium) badgeText += ' ';
+                }
               }
               
               // Create username with badges
@@ -1422,11 +1624,43 @@ app.get('/', (req, res) => {
               usernameSpan.style.fontSize = '18px';
               usernameSpan.textContent = badgeText + entry.username;
               
+              // Apply username color from config
+              if (window.chatConfig && window.chatConfig.chatColors && window.chatConfig.chatColors.username) {
+                usernameSpan.style.color = window.chatConfig.chatColors.username;
+              }
+              
               // Create message
               const messageSpan = document.createElement('span');
               messageSpan.style.fontSize = '18px';
               messageSpan.style.wordBreak = 'break-word';
               messageSpan.textContent = entry.message;
+              
+              // Apply text color from config
+              if (window.chatConfig && window.chatConfig.chatColors && window.chatConfig.chatColors.text) {
+                messageSpan.style.color = window.chatConfig.chatColors.text;
+              }
+              
+              // Check if this is a command message
+              const isCommand = entry.message.startsWith('!');
+              if (isCommand && window.chatConfig && window.chatConfig.chatColors && window.chatConfig.chatColors.command) {
+                messageSpan.style.color = window.chatConfig.chatColors.command;
+              }
+              
+              // Check if we should filter command messages
+              const filterCommands = window.chatConfig ? window.chatConfig.filterCommands : false;
+              if (filterCommands && isCommand) {
+                continue; // Skip this message
+              }
+              
+              // Check if this message mentions the bot
+              const highlightMentions = window.chatConfig ? window.chatConfig.highlightMentions : true;
+              if (highlightMentions && entry.message.toLowerCase().includes('max2d2')) {
+                if (window.chatConfig && window.chatConfig.chatColors && window.chatConfig.chatColors.mention) {
+                  messageSpan.style.backgroundColor = window.chatConfig.chatColors.mention + '33'; // Add transparency
+                  messageSpan.style.padding = '2px 4px';
+                  messageSpan.style.borderRadius = '3px';
+                }
+              }
               
               // Append elements
               chatLine.appendChild(timeSpan);
@@ -1650,6 +1884,10 @@ app.get('/', (req, res) => {
       updateChat();
       updateCommands();
       updateStats();
+      
+      // Clear any existing chat config that might be filtering commands
+      localStorage.removeItem('chatConfig');
+      window.chatConfig = null;
       
       // Set up polling
       setInterval(updateStatus, 5000);
@@ -1993,6 +2231,46 @@ app.get('/', (req, res) => {
           };
         }
       });
+
+      // Apply chat styles from localStorage
+      function applyChatStyles() {
+        try {
+          const chatConfigStr = localStorage.getItem('chatConfig');
+          if (chatConfigStr) {
+            const chatConfig = JSON.parse(chatConfigStr);
+            console.log('Applying chat styles from localStorage:', chatConfig);
+            
+            // Apply styles to chat container
+            if (chatConfig.chatColors && chatConfig.chatColors.background) {
+              chatContainer.style.backgroundColor = chatConfig.chatColors.background;
+            }
+            
+            // Apply font size
+            if (chatConfig.fontSizeChat) {
+              let fontSize = '16px'; // Default medium
+              
+              switch (chatConfig.fontSizeChat) {
+                case 'small':
+                  fontSize = '14px';
+                  break;
+                case 'medium':
+                  fontSize = '16px';
+                  break;
+                case 'large':
+                  fontSize = '18px';
+                  break;
+              }
+              
+              chatContainer.style.fontSize = fontSize;
+            }
+            
+            // Store the config in a global variable for use when rendering messages
+            window.chatConfig = chatConfig;
+          }
+        } catch (error) {
+          console.error('Error applying chat styles from localStorage:', error);
+        }
+      }
     </script>
   </body>
   </html>

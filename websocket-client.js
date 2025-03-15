@@ -41,7 +41,7 @@ class WebSocketClient {
    */
   connect() {
     // Get host and port from environment variables or use defaults
-    const host = process.env.WEBSOCKET_HOST || '192.168.1.122';
+    const host = process.env.WEBSOCKET_HOST || 'localhost';
     const port = process.env.WEBSOCKET_PORT || 8080;
     const serverUrl = `ws://${host}:${port}`;
     
@@ -315,6 +315,38 @@ class WebSocketClient {
             }
             break;
             
+          case 'CHAT':
+            // Handle CHAT messages from the server
+            this.addLog(`Received CHAT message: ${message.message || ''}`);
+            
+            // Add to chat messages if a handler is provided
+            if (this.addChatMessage) {
+              // For outgoing messages from the control panel, the username is the bot's username
+              const username = this.appState.stats.botUsername || 'Max2d2';
+              this.addChatMessage(
+                username,
+                message.message || '',
+                message.channel || '#unknown',
+                {} // No badges for bot messages
+              );
+            }
+            break;
+            
+          case 'CHAT_FROM_TWITCH':
+            // Handle chat messages from Twitch users
+            this.addLog(`Received Twitch chat message from ${message.username || 'unknown'}: ${message.message || ''}`);
+            
+            // Add to chat messages if a handler is provided
+            if (this.addChatMessage) {
+              this.addChatMessage(
+                message.username || 'unknown',
+                message.message || '',
+                message.channel || '#unknown',
+                message.badges || {}
+              );
+            }
+            break;
+            
           case 'CONNECTION_STATE':
             const state = message.state || 'unknown';
             this.addLog(`Received connection state: ${state}`);
@@ -362,7 +394,23 @@ class WebSocketClient {
             break;
             
           default:
-            this.addLog(`Received message of type: ${message.type}`);
+            this.addLog(`Received message of type: ${messageType}`);
+            
+            // Check if this is a chat-related message that wasn't caught by the specific handlers
+            if (message.username && message.message) {
+              this.addLog(`This appears to be a chat message from ${message.username}`);
+              
+              // Add to chat messages if a handler is provided
+              if (this.addChatMessage) {
+                this.addChatMessage(
+                  message.username,
+                  message.message,
+                  message.channel || '#unknown',
+                  message.badges || {}
+                );
+              }
+            }
+            break;
         }
       } catch (error) {
         this.addLog(`Error processing message: ${error.message}`);
